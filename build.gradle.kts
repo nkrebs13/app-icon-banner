@@ -1,0 +1,45 @@
+plugins {
+    `kotlin-dsl`
+    alias(libs.plugins.plugin.publish)
+}
+
+group = "io.github.nkrebs13"
+version = "0.1.0"
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+dependencies {
+    compileOnly(libs.agp.api)
+    implementation(libs.easylauncher)
+
+    testImplementation(libs.junit.jupiter)
+    testImplementation(gradleTestKit())
+    // AGP types are compileOnly for consumers, but ProjectBuilder tests need them loadable so the
+    // plugin's findByType(AndroidComponentsExtension) resolves to null instead of NoClassDefFound.
+    testImplementation(libs.agp.api)
+    testRuntimeOnly(libs.junit.platform.launcher)
+}
+
+gradlePlugin {
+    website = "https://github.com/nkrebs13/app-icon-banner"
+    vcsUrl = "https://github.com/nkrebs13/app-icon-banner"
+    plugins {
+        create("appIconBanner") {
+            id = "io.github.nkrebs13.app-icon-banner"
+            displayName = "App Icon Banner"
+            description =
+                "Stamp a color + label banner onto Android and iOS app icons per build variant / " +
+                "Xcode configuration. Wraps easylauncher on Android; ships a CLI for iOS."
+            tags = listOf("android", "ios", "kmp", "launcher", "icon", "banner", "variant")
+            implementationClass = "io.github.nkrebs13.appiconbanner.AppIconBannerPlugin"
+        }
+    }
+}
+
+tasks.withType<Test>().configureEach {
+    useJUnitPlatform()
+}

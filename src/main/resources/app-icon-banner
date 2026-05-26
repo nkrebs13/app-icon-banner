@@ -1,0 +1,135 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# app-icon-banner — stamp a color+label banner onto iOS app icons per Xcode configuration.
+#
+# Installed by the AppIconBanner Gradle plugin (io.github.nkrebs13.app-icon-banner). Safe to commit.
+# Invoke from an Xcode "Run Script" build phase placed BEFORE "Copy Bundle Resources":
+#
+#   "${SRCROOT}/scripts/app-icon-banner" \
+#       --config "$CONFIGURATION" \
+#       --appiconset "$SRCROOT/<App>/Assets.xcassets/AppIcon.appiconset"
+#
+# Idempotent: the output appiconset is regenerated from a pristine "<name>-base.appiconset" on every
+# run, so re-running never double-stamps. Commit the *-base.appiconset; gitignore the output set.
+
+CONFIG=""
+APPICONSET=""
+BASE=""
+CONFIG_FILE=""
+FONT=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --config)       CONFIG="${2:-}"; shift 2 ;;
+    --appiconset)   APPICONSET="${2:-}"; shift 2 ;;
+    --base)         BASE="${2:-}"; shift 2 ;;
+    --config-file)  CONFIG_FILE="${2:-}"; shift 2 ;;
+    --font)         FONT="${2:-}"; shift 2 ;;
+    -h|--help)      sed -n '3,18p' "$0"; exit 0 ;;
+    *) echo "app-icon-banner: unknown argument: $1" >&2; exit 2 ;;
+  esac
+done
+
+[[ -n "$CONFIG" ]]     || { echo "app-icon-banner: --config is required" >&2; exit 2; }
+[[ -n "$APPICONSET" ]] || { echo "app-icon-banner: --appiconset is required" >&2; exit 2; }
+
+# Default config file: next to SRCROOT, else current directory.
+if [[ -z "$CONFIG_FILE" ]]; then
+  if [[ -n "${SRCROOT:-}" && -f "$SRCROOT/app-icon-banner.config" ]]; then
+    CONFIG_FILE="$SRCROOT/app-icon-banner.config"
+  else
+    CONFIG_FILE="app-icon-banner.config"
+  fi
+fi
+
+# Default base set: sibling "<name>-base.appiconset".
+[[ -n "$BASE" ]] || BASE="${APPICONSET%.appiconset}-base.appiconset"
+
+lc() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+
+# Look up color|label for this configuration (case-insensitive on the config name).
+COLOR=""
+LABEL=""
+if [[ -f "$CONFIG_FILE" ]]; then
+  while IFS='|' read -r name color label || [[ -n "$name" ]]; do
+    [[ -z "${name// }" ]] && continue
+    if [[ "$(lc "$name")" == "$(lc "$CONFIG")" ]]; then
+      COLOR="$color"
+      LABEL="$label"
+      break
+    fi
+  done < "$CONFIG_FILE"
+fi
+
+# Regenerate the output set from the pristine base (idempotency). First run with no base treats the
+# current set as pristine and snapshots it.
+if [[ -d "$BASE" ]]; then
+  rm -rf "$APPICONSET"
+  cp -R "$BASE" "$APPICONSET"
+elif [[ -d "$APPICONSET" ]]; then
+  cp -R "$APPICONSET" "$BASE"
+else
+  echo "app-icon-banner: appiconset not found: $APPICONSET" >&2
+  exit 1
+fi
+
+if [[ -z "$COLOR" ]]; then
+  echo "app-icon-banner: no banner for configuration '$CONFIG' — left pristine."
+  exit 0
+fi
+
+if command -v magick >/dev/null 2>&1; then
+  IM=(magick)
+elif command -v convert >/dev/null 2>&1; then
+  IM=(convert)
+else
+  echo "app-icon-banner: ImageMagick not found. Install with: brew install imagemagick" >&2
+  exit 1
+fi
+
+# Text rendering needs the Freetype delegate. Some minimal ImageMagick builds omit it.
+if ! "${IM[@]}" -version | grep -qi 'freetype'; then
+  echo "app-icon-banner: this ImageMagick build lacks the Freetype delegate, so labels cannot be" >&2
+  echo "  rendered. Reinstall with Freetype: brew reinstall imagemagick" >&2
+  exit 1
+fi
+
+# Resolve a font file. Fontconfig is often absent on macOS ImageMagick builds, so we pass an
+# explicit TTF/TTC path rather than a font name. Override with --font.
+if [[ -z "$FONT" ]]; then
+  for candidate in \
+    /System/Library/Fonts/Helvetica.ttc \
+    /System/Library/Fonts/HelveticaNeue.ttc \
+    /System/Library/Fonts/SFNS.ttf \
+    /System/Library/Fonts/Supplemental/Arial.ttf \
+    /Library/Fonts/Arial.ttf; do
+    if [[ -f "$candidate" ]]; then FONT="$candidate"; break; fi
+  done
+fi
+if [[ -z "$FONT" || ! -f "$FONT" ]]; then
+  echo "app-icon-banner: no usable font found; pass one with --font <path-to.ttf>" >&2
+  exit 1
+fi
+
+shopt -s nullglob
+count=0
+for icon in "$APPICONSET"/*.png; do
+  read -r W H < <("${IM[@]}" identify -format '%w %h\n' "$icon")
+  band=$(( H * 22 / 100 ))
+  [[ "$band" -lt 1 ]] && band=1
+  fontsize=$(( band * 55 / 100 ))
+  [[ "$fontsize" -lt 6 ]] && fontsize=6
+  # -colorspace sRGB -type TrueColor on the base guards against grayscale source icons (a
+  # grayscale base would collapse the colored band to gray during compositing). -strip removes
+  # metadata so repeated runs are byte-for-byte identical (idempotency).
+  "${IM[@]}" "$icon" -colorspace sRGB -type TrueColor \
+    \( -size "${W}x${band}" "xc:${COLOR}" \
+       -font "$FONT" -fill white -gravity center -pointsize "$fontsize" -annotate 0 "$LABEL" \) \
+    -gravity south -composite \
+    -strip \
+    "$icon"
+  count=$(( count + 1 ))
+done
+
+echo "app-icon-banner: stamped '$LABEL' (${COLOR}) on ${count} icon(s) in $(basename "$APPICONSET") for '$CONFIG'."
