@@ -18,15 +18,21 @@ APPICONSET=""
 BASE=""
 CONFIG_FILE=""
 FONT=""
+HEIGHT_PCT=18           # band height as % of icon height (smaller than v1's 22 to leave clearance)
+BOTTOM_INSET_PCT=8      # band bottom edge sits this % above icon bottom (clears iOS squircle)
+TEXT_PCT=55             # text point size as % of band height
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --config)       CONFIG="${2:-}"; shift 2 ;;
-    --appiconset)   APPICONSET="${2:-}"; shift 2 ;;
-    --base)         BASE="${2:-}"; shift 2 ;;
-    --config-file)  CONFIG_FILE="${2:-}"; shift 2 ;;
-    --font)         FONT="${2:-}"; shift 2 ;;
-    -h|--help)      sed -n '3,18p' "$0"; exit 0 ;;
+    --config)            CONFIG="${2:-}"; shift 2 ;;
+    --appiconset)        APPICONSET="${2:-}"; shift 2 ;;
+    --base)              BASE="${2:-}"; shift 2 ;;
+    --config-file)       CONFIG_FILE="${2:-}"; shift 2 ;;
+    --font)              FONT="${2:-}"; shift 2 ;;
+    --height-pct)        HEIGHT_PCT="${2:-}"; shift 2 ;;
+    --bottom-inset-pct)  BOTTOM_INSET_PCT="${2:-}"; shift 2 ;;
+    --text-pct)          TEXT_PCT="${2:-}"; shift 2 ;;
+    -h|--help)           sed -n '3,18p' "$0"; exit 0 ;;
     *) echo "app-icon-banner: unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -116,17 +122,21 @@ shopt -s nullglob
 count=0
 for icon in "$APPICONSET"/*.png; do
   read -r W H < <("${IM[@]}" identify -format '%w %h\n' "$icon")
-  band=$(( H * 22 / 100 ))
+  band=$(( H * HEIGHT_PCT / 100 ))
   [[ "$band" -lt 1 ]] && band=1
-  fontsize=$(( band * 55 / 100 ))
+  inset=$(( H * BOTTOM_INSET_PCT / 100 ))
+  fontsize=$(( band * TEXT_PCT / 100 ))
   [[ "$fontsize" -lt 6 ]] && fontsize=6
   # -colorspace sRGB -type TrueColor on the base guards against grayscale source icons (a
   # grayscale base would collapse the colored band to gray during compositing). -strip removes
   # metadata so repeated runs are byte-for-byte identical (idempotency).
+  # The +0+$inset geometry lifts the band off the bottom edge — critical on iOS where the
+  # squircle mask clips the bottom-corner region. Default 8% inset keeps the band fully inside
+  # the visible squircle so no letter descenders are clipped.
   "${IM[@]}" "$icon" -colorspace sRGB -type TrueColor \
     \( -size "${W}x${band}" "xc:${COLOR}" \
        -font "$FONT" -fill white -gravity center -pointsize "$fontsize" -annotate 0 "$LABEL" \) \
-    -gravity south -composite \
+    -gravity south -geometry "+0+$inset" -composite \
     -strip \
     "$icon"
   count=$(( count + 1 ))

@@ -164,7 +164,15 @@ app-icon-banner --config <name> --appiconset <path/AppIcon.appiconset>
                 [--base <path/AppIcon-base.appiconset>]   # default: <name>-base.appiconset
                 [--config-file <app-icon-banner.config>]  # default: $SRCROOT/app-icon-banner.config
                 [--font <path-to.ttf>]                    # default: a macOS system font
+                [--height-pct N]                          # band height as % of icon (default: 18)
+                [--bottom-inset-pct N]                    # band lifted N% above icon bottom (default: 8)
+                [--text-pct N]                            # text size as % of band height (default: 55)
 ```
+
+The defaults are tuned to be **safe inside the iOS squircle mask** — at 8% bottom inset and 18%
+height, no letter descenders are clipped on standard iOS app icons. Raise `--bottom-inset-pct` if
+you're stamping a non-iOS asset and want the band flush with the bottom edge, or for icons with
+unusually aggressive corner rounding.
 
 ## How it works
 
