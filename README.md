@@ -54,6 +54,43 @@ appIconBanner {
 }
 ```
 
+### Three-tier recipe (debug / internal / release)
+
+The most common setup: distinguish dev builds, tester distributions (Firebase App
+Distribution / TestFlight), and production at a glance. Pair each banner with an
+`applicationIdSuffix` so all three install side-by-side on a tester device.
+
+```kotlin
+android {
+    buildTypes {
+        debug {
+            applicationIdSuffix = ".debug"
+            // ...
+        }
+        create("internal") {
+            applicationIdSuffix = ".internal"
+            // Library modules don't know about a custom buildType; tell AGP to resolve their
+            // deps to the `release` variant (then `debug` if a module is debug-only).
+            matchingFallbacks += listOf("release", "debug")
+            isMinifyEnabled = true
+            // ...release-like config...
+        }
+        release { /* no suffix */ }
+    }
+}
+
+appIconBanner {
+    buildType("debug")    { color = "#0288D1"; label = "DEBUG" }
+    buildType("internal") { color = "#FF6F00"; label = "INTERNAL" }
+    // release: no entry -> no banner
+}
+```
+
+**Gotcha:** any buildType beyond `debug`/`release` needs `matchingFallbacks` on the
+consumer side or AGP throws `NoMatchingVariantSelectionException` when resolving
+library dependencies. This is an Android Gradle concern, not the plugin's — but adding a
+new buildType to drive a banner is the most common time you'll hit it.
+
 ### Resolution order
 
 For each variant the **most specific** match wins — banners never stack:
@@ -99,6 +136,26 @@ The Android side is automatic. iOS needs a one-time wiring (icons are built by X
 
 The script reads `$CONFIGURATION` (e.g. `Debug`, `Release`, `Firebase`), looks it up in
 `app-icon-banner.config`, and stamps accordingly. Configurations with no entry are left pristine.
+
+### KMP / multi-module projects: redirecting the iOS outputs
+
+In a typical KMP app the Android plugin is applied in (e.g.) `:app:android`, so the
+default output location for `app-icon-banner.config` and `scripts/app-icon-banner` ends up
+inside the Android module — inconveniently far from `iosApp/`. Override the task's outputs
+to land next to the iOS app instead:
+
+```kotlin
+// app/android/build.gradle.kts
+import io.github.nkrebs13.appiconbanner.ios.ExportIosBannerConfigTask
+
+tasks.named<ExportIosBannerConfigTask>("exportIosBannerConfig") {
+    outputConfig.set(rootProject.layout.projectDirectory.file("iosApp/app-icon-banner.config"))
+    outputCli.set(rootProject.layout.projectDirectory.file("iosApp/scripts/app-icon-banner"))
+}
+```
+
+The Xcode Run Script then references `${SRCROOT}/scripts/app-icon-banner` as usual (since
+`$SRCROOT` for the iOS target IS `iosApp/`).
 
 ### CLI options
 
