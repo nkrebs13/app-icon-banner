@@ -62,6 +62,7 @@ public abstract class io/github/nkrebs13/appiconbanner/android/StampAndroidIcons
 	public abstract fun getIconName ()Lorg/gradle/api/provider/Property;
 	public abstract fun getOutputDir ()Lorg/gradle/api/file/DirectoryProperty;
 	public abstract fun getSourceResDir ()Lorg/gradle/api/file/DirectoryProperty;
+	public abstract fun getVariantName ()Lorg/gradle/api/provider/Property;
 	public final fun stamp ()V
 }
 

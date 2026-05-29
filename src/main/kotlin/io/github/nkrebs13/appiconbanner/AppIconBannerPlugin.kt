@@ -41,6 +41,9 @@ class AppIconBannerPlugin : Plugin<Project> {
                     bannerColor.set(config.color)
                     bannerLabel.set(config.label)
                     iconName.set(extension.androidIconName)
+                    // Lowercase variant name used for generated resource names (must be a valid
+                    // Android resource name: lowercase letters, digits, underscores only).
+                    variantName.set(variant.name.lowercase().replace(Regex("[^a-z0-9]"), "_"))
                     outputDir.set(
                         project.layout.buildDirectory.dir(
                             "generated/app-icon-banner/${variant.name}/res",
