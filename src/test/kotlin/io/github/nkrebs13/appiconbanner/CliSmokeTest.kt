@@ -113,6 +113,7 @@ class CliSmokeTest {
         task.bannerColor.set("#0288D1")
         task.bannerLabel.set("DEBUG")
         task.iconName.set("ic_launcher")
+        task.variantName.set("debug")
         task.outputDir.set(outputDir)
 
         task.stamp()
