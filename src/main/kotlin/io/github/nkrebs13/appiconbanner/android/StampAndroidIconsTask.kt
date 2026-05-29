@@ -16,20 +16,13 @@ import java.io.File
 private val STAMPABLE_EXTENSIONS = setOf("png", "webp")
 
 // Adaptive icon canvas is always 108dp. Pixel width per density qualifier.
+// ADAPTIVE_DENSITY_FACTOR is derived as canvasPx / 108.0 — no second map needed.
 private val ADAPTIVE_CANVAS_PX = mapOf(
     "mdpi" to 108,
     "hdpi" to 162,
     "xhdpi" to 216,
     "xxhdpi" to 324,
     "xxxhdpi" to 432,
-)
-// Density multipliers matching the canvas sizes above.
-private val ADAPTIVE_DENSITY_FACTOR = mapOf(
-    "mdpi" to 1.0,
-    "hdpi" to 1.5,
-    "xhdpi" to 2.0,
-    "xxhdpi" to 3.0,
-    "xxxhdpi" to 4.0,
 )
 
 // Banner geometry for adaptive icons — must stay inside the 72/108 dp safe zone.
@@ -46,6 +39,16 @@ private const val ADAPTIVE_TEXT_PCT = 55
 private const val BANNER_HEIGHT_DP = 24
 private const val BANNER_BOTTOM_DP = 22
 private const val BANNER_TOP_DP = 108 - BANNER_HEIGHT_DP - BANNER_BOTTOM_DP  // 62
+
+// Candidates checked in order; first found wins. Fontconfig is often absent on macOS
+// ImageMagick builds, so we use explicit paths rather than font names.
+private val FONT_CANDIDATES = listOf(
+    "/System/Library/Fonts/Helvetica.ttc",
+    "/System/Library/Fonts/HelveticaNeue.ttc",
+    "/System/Library/Fonts/SFNS.ttf",
+    "/System/Library/Fonts/Supplemental/Arial.ttf",
+    "/Library/Fonts/Arial.ttf",
+)
 
 /**
  * Stamps the color+label banner onto all Android launcher icons for one variant, writing
@@ -113,9 +116,12 @@ abstract class StampAndroidIconsTask : DefaultTask() {
         output.deleteRecursively()
         output.mkdirs()
 
-        val mipmapDirs = source.listFiles()
-            ?.filter { it.isDirectory && it.name.startsWith("mipmap-") && !it.name.contains("anydpi") }
-            ?: emptyList()
+        // Compute both slices from one directory listing.
+        val allSourceDirs = source.listFiles()?.filter { it.isDirectory } ?: emptyList()
+        val mipmapDirs = allSourceDirs.filter {
+            it.name.startsWith("mipmap-") && !it.name.contains("anydpi")
+        }
+        val anydpiDirs = allSourceDirs.filter { it.name.startsWith("mipmap-anydpi") }
 
         if (mipmapDirs.isEmpty()) {
             logger.warn(
@@ -141,6 +147,7 @@ abstract class StampAndroidIconsTask : DefaultTask() {
         val monochromeNames = setOf("${base}_monochrome")
 
         var totalStamped = 0
+        var hasRasterForeground = false
 
         try {
             mipmapDirs.forEach { mipmapDir ->
@@ -160,6 +167,7 @@ abstract class StampAndroidIconsTask : DefaultTask() {
 
                 val adaptiveFiles = findIcons(mipmapDir, adaptiveNames)
                 if (adaptiveFiles.isNotEmpty()) {
+                    hasRasterForeground = true
                     totalStamped += stampIcons(
                         cli = cli,
                         workDir = File(workRoot, "${mipmapDir.name}-adaptive").also { it.mkdirs() },
@@ -177,20 +185,21 @@ abstract class StampAndroidIconsTask : DefaultTask() {
                     .forEach { it.copyTo(File(outMipmapDir, it.name), overwrite = true) }
             }
 
-            // If there are no raster foreground images across any density bucket, check for an
-            // XML vector foreground. If found, generate a banner overlay via a layer-list.
-            val hasRasterForeground = mipmapDirs.any { findIcons(it, adaptiveNames).isNotEmpty() }
+            // If there are no raster foreground images across any density bucket, check whether
+            // the adaptive icon XML references an XML vector foreground. Reading from the adaptive
+            // icon XML directly is authoritative — avoids guessing the drawable name/location.
             if (!hasRasterForeground) {
-                val foregroundXml = File(source, "drawable/${base}_foreground.xml")
-                if (foregroundXml.exists()) {
+                val xmlForeground = detectXmlVectorForeground(source, anydpiDirs)
+                if (xmlForeground != null) {
                     generateXmlForegroundOverlay(
                         source = source,
                         output = output,
+                        anydpiDirs = anydpiDirs,
                         color = color, label = label,
                         base = base, variant = variant,
                         mipmapDirs = mipmapDirs,
                     )
-                    totalStamped += mipmapDirs.size  // count density buckets affected
+                    totalStamped += mipmapDirs.size
                 }
             }
         } finally {
@@ -208,29 +217,43 @@ abstract class StampAndroidIconsTask : DefaultTask() {
      * Generates per-density banner PNGs, a layer-list XML that stacks the original vector
      * foreground + banner, and updated adaptive-icon XMLs that reference the new layer-list.
      * All outputs go into the generated res directory; AGP merges them with highest priority.
+     *
+     * Banner PNGs are generated via the same ImageMagick binary the CLI uses (magick / convert),
+     * with the same `-colorspace sRGB -strip` flags for consistency and idempotency.
      */
     private fun generateXmlForegroundOverlay(
         source: File, output: File,
+        anydpiDirs: List<File>,
         color: String, label: String,
         base: String, variant: String,
         mipmapDirs: List<File>,
     ) {
         val bannerResourceName = "app_icon_banner_$variant"
         val foregroundLayerName = "${base}_foreground_$variant"
-        val font = resolveFont() ?: run {
+
+        val font = FONT_CANDIDATES.firstOrNull { File(it).exists() } ?: run {
             logger.warn(
                 "app-icon-banner: no usable font found; cannot generate adaptive-icon banner overlay. " +
-                    "Pass --font <path> or install Helvetica/Arial on this machine.",
+                    "Install Helvetica/Arial or pass --font to the CLI.",
             )
             return
         }
 
-        // 1. Generate a banner-only PNG at the correct dimensions for each density.
-        //    Size: full adaptive canvas width × 22% height, matching the layer-list dp values.
+        // Detect which ImageMagick binary is available — same logic as the bundled CLI.
+        val im = listOf("magick", "convert").firstOrNull { bin ->
+            ProcessBuilder(bin, "-version").redirectErrorStream(true)
+                .start().let { it.inputStream.bufferedReader().readText(); it.waitFor() } == 0
+        } ?: run {
+            logger.warn("app-icon-banner: ImageMagick not found; adaptive-icon overlay not generated.")
+            return
+        }
+
+        // 1. Generate a banner-only PNG per density.
+        //    Width = full adaptive canvas; height = 24dp × density_factor (matches layer-list).
         mipmapDirs.forEach { mipmapDir ->
             val density = mipmapDir.name.removePrefix("mipmap-")
             val canvasPx = ADAPTIVE_CANVAS_PX[density] ?: return@forEach
-            val densityFactor = ADAPTIVE_DENSITY_FACTOR[density] ?: return@forEach
+            val densityFactor = canvasPx / 108.0
 
             val bannerW = canvasPx
             val bannerH = (BANNER_HEIGHT_DP * densityFactor).toInt().coerceAtLeast(1)
@@ -240,13 +263,15 @@ abstract class StampAndroidIconsTask : DefaultTask() {
             val bannerPng = File(outMipmapDir, "$bannerResourceName.png")
 
             val process = ProcessBuilder(
-                "magick",
+                im,
                 "-size", "${bannerW}x${bannerH}", "xc:$color",
                 "-font", font,
                 "-fill", "white",
                 "-gravity", "center",
                 "-pointsize", fontsize.toString(),
                 "-annotate", "0", label,
+                "-colorspace", "sRGB",
+                "-type", "TrueColor",
                 "-strip",
                 bannerPng.absolutePath,
             ).redirectErrorStream(true).start()
@@ -256,7 +281,7 @@ abstract class StampAndroidIconsTask : DefaultTask() {
         }
 
         // 2. Write the layer-list XML that stacks original foreground + banner.
-        //    Layer-list uses dp units: banner_top=62dp, banner_bottom=22dp (see constants).
+        //    Uses dp units so the same XML works at all densities.
         val drawableOut = File(output, "drawable").apply { mkdirs() }
         File(drawableOut, "$foregroundLayerName.xml").writeText(
             """<?xml version="1.0" encoding="utf-8"?>
@@ -270,32 +295,33 @@ abstract class StampAndroidIconsTask : DefaultTask() {
 """,
         )
 
-        // 3. Write updated adaptive-icon XMLs that reference the new layer-list foreground.
-        //    Detect the background reference from the originals so we don't hard-code it.
-        source.listFiles()
-            ?.filter { it.isDirectory && it.name.startsWith("mipmap-anydpi") }
-            ?.forEach { anydpiDir ->
-                val xmlFiles = anydpiDir.listFiles()
-                    ?.filter { it.extension == "xml" && it.nameWithoutExtension.startsWith(base) }
-                    ?: return@forEach
+        // 3. Write updated adaptive-icon XMLs using the new layer-list foreground.
+        //    Extract the background ref from the original XML via findAll (no trailing-space
+        //    assumption) so color references, non-conventional names, and inline formatting all work.
+        anydpiDirs.forEach { anydpiDir ->
+            val xmlFiles = anydpiDir.listFiles()
+                ?.filter { it.extension == "xml" && it.nameWithoutExtension.startsWith(base) }
+                ?: return@forEach
 
-                val outAnydpiDir = File(output, anydpiDir.name).apply { mkdirs() }
-                xmlFiles.forEach { xmlFile ->
-                    val original = xmlFile.readText()
-                    val backgroundRef = Regex("""android:drawable="(@[^"]+background[^"]*)" """)
-                        .find(original)?.groupValues?.getOrNull(1)
-                        ?: "@drawable/${base}_background"
+            val outAnydpiDir = File(output, anydpiDir.name).apply { mkdirs() }
+            xmlFiles.forEach { xmlFile ->
+                val original = xmlFile.readText()
+                val backgroundRef = Regex("""android:drawable="(@[^"]+)"""")
+                    .findAll(original)
+                    .map { it.groupValues[1] }
+                    .firstOrNull { "background" in it }
+                    ?: "@drawable/${base}_background"
 
-                    File(outAnydpiDir, xmlFile.name).writeText(
-                        """<?xml version="1.0" encoding="utf-8"?>
+                File(outAnydpiDir, xmlFile.name).writeText(
+                    """<?xml version="1.0" encoding="utf-8"?>
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <background android:drawable="$backgroundRef"/>
     <foreground android:drawable="@drawable/$foregroundLayerName"/>
 </adaptive-icon>
 """,
-                    )
-                }
+                )
             }
+        }
 
         logger.lifecycle(
             "app-icon-banner: generated adaptive-icon layer-list overlay " +
@@ -331,22 +357,35 @@ abstract class StampAndroidIconsTask : DefaultTask() {
         return sources.size
     }
 
+    /**
+     * Returns the XML foreground file if the adaptive icon XML references one, or null if the
+     * foreground is a raster (no overlay needed) or not found.
+     *
+     * Reads the `<foreground android:drawable="@type/name"/>` attribute from the first adaptive
+     * icon XML in [anydpiDirs] and checks whether `res/type/name.xml` exists in [source].
+     * This is authoritative — avoids guessing drawable names or locations.
+     */
+    private fun detectXmlVectorForeground(source: File, anydpiDirs: List<File>): File? {
+        val adaptiveIconXml = anydpiDirs
+            .flatMap { it.listFiles()?.filter { f -> f.extension == "xml" } ?: emptyList() }
+            .firstOrNull() ?: return null
+
+        val xml = adaptiveIconXml.readText()
+        val foregroundSection = xml.substringAfter("<foreground", "").ifBlank { return null }
+        val foregroundRef = Regex("""android:drawable="(@[^"]+)"""")
+            .find(foregroundSection)
+            ?.groupValues?.getOrNull(1) ?: return null
+
+        // foregroundRef is "@type/name" — resolve to source/type/name.xml
+        val parts = foregroundRef.removePrefix("@").split("/", limit = 2)
+        if (parts.size != 2) return null
+        return File(source, "${parts[0]}/${parts[1]}.xml").takeIf { it.exists() }
+    }
+
     private fun findIcons(dir: File, baseNames: Set<String>): List<File> =
         dir.listFiles()?.filter { f ->
             f.extension in STAMPABLE_EXTENSIONS && f.nameWithoutExtension in baseNames
         } ?: emptyList()
-
-    /**
-     * Resolves a system font path for ImageMagick text rendering. Fontconfig is often absent on
-     * macOS ImageMagick builds, so we use explicit paths. Returns null if no font is found.
-     */
-    private fun resolveFont(): String? = listOf(
-        "/System/Library/Fonts/Helvetica.ttc",
-        "/System/Library/Fonts/HelveticaNeue.ttc",
-        "/System/Library/Fonts/SFNS.ttf",
-        "/System/Library/Fonts/Supplemental/Arial.ttf",
-        "/Library/Fonts/Arial.ttf",
-    ).firstOrNull { File(it).exists() }
 
     private fun extractCli(parentDir: File): File {
         val cli = File(parentDir, "app-icon-banner")
