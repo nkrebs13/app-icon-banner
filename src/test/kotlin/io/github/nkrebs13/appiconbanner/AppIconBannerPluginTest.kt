@@ -10,6 +10,12 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.io.File
 
+// NOTE: The Android wiring path (onVariants callback → easylauncher ColorRibbonFilter registration)
+// is not unit-testable via ProjectBuilder because AGP's onVariants lifecycle requires a full Gradle
+// build execution (not just configuration) to fire variant callbacks. The core logic is covered by
+// AppIconBannerExtensionTest (resolution priority, defaults, validation). The wiring itself is
+// VERIFICATION-PENDING-HUMAN: apply the plugin in a real Android/KMP project and confirm that
+// debug variants show the banner ribbon and release variants do not.
 class AppIconBannerPluginTest {
 
     @Test

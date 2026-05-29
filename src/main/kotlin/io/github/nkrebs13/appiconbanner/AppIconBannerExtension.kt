@@ -13,7 +13,8 @@ private val COLOR_REGEX = Regex("^#[0-9A-Fa-f]{6}$")
  *
  * [color] must be `#RRGGBB` (six hex digits, e.g. `#0288D1`); defaults to
  * [AppIconBannerExtension.DEFAULT_COLOR] when omitted.
- * [label] must not contain `|` (used as config-file field separator); defaults to the slot name.
+ * [label] must not contain `|` (config-file field separator) or `%` (ImageMagick format specifier);
+ * defaults to the slot name when omitted.
  */
 class BannerSpec {
     var color: String? = null
@@ -27,6 +28,9 @@ class BannerSpec {
         }
         require('|' !in resolvedLabel) {
             "appIconBanner: label '$resolvedLabel' must not contain '|' — it is used as the config file field separator"
+        }
+        require('%' !in resolvedLabel) {
+            "appIconBanner: label '$resolvedLabel' must not contain '%' — ImageMagick interprets %-prefixed sequences in annotation text"
         }
         return BannerConfig(color = resolvedColor, label = resolvedLabel)
     }

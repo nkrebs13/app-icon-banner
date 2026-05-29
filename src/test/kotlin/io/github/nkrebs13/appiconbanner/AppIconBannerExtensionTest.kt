@@ -121,4 +121,24 @@ class AppIconBannerExtensionTest {
         // AGP can pass a null buildType for headerless APK variants (e.g. dynamic feature modules).
         assertNull(extension().resolveAndroid("someVariant", emptyList(), null))
     }
+
+    @Test
+    fun `invalid color throws via iosConfigLines`() {
+        val ext = extension { iosConfiguration("Debug") { color = "notacolor" } }
+        val ex = assertThrows<IllegalArgumentException> { ext.iosConfigLines() }
+        val msg = ex.message!!
+        assertTrue(msg.contains("notacolor") && msg.contains("appIconBanner"),
+            "expected 'notacolor' and 'appIconBanner' in: $msg")
+    }
+
+    @Test
+    fun `label with percent sign throws with a clear message`() {
+        val ext = extension { buildType("debug") { label = "%[fx:debug(1)]" } }
+        val ex = assertThrows<IllegalArgumentException> {
+            ext.resolveAndroid("phoneDebug", listOf("phone"), "debug")
+        }
+        val msg = ex.message!!
+        assertTrue(msg.contains("%") && msg.contains("appIconBanner"),
+            "expected '%' and 'appIconBanner' in: $msg")
+    }
 }

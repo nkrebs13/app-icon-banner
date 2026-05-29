@@ -47,10 +47,11 @@ apiValidation {
     ignoredClasses.add("io.github.nkrebs13.appiconbanner.AppIconBannerPlugin\$inlined\$sam\$i\$org_gradle_api_Action\$0")
 }
 
-tasks.withType<Test>().configureEach {
+// Scope the exclusion only to the default `test` task. Using `withType<Test>().configureEach`
+// would also configure `cliSmokeTest`, causing a tag include+exclude collision where JUnit
+// Platform resolves the tag as excluded (exclude wins) and silently runs 0 tests.
+tasks.named<Test>("test") {
     useJUnitPlatform {
-        // CLI smoke test requires a Freetype-enabled ImageMagick on PATH.
-        // Run explicitly via ./gradlew cliSmokeTest (on macOS with ImageMagick installed).
         excludeTags("cli-smoke")
     }
 }
@@ -58,5 +59,7 @@ tasks.withType<Test>().configureEach {
 tasks.register<Test>("cliSmokeTest") {
     group = "verification"
     description = "Runs the CLI smoke test (requires Freetype-enabled ImageMagick on PATH)."
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
     useJUnitPlatform { includeTags("cli-smoke") }
 }
