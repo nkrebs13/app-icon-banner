@@ -1,5 +1,7 @@
 package io.github.nkrebs13.appiconbanner
 
+import io.github.nkrebs13.appiconbanner.android.StampAndroidIconsTask
+import org.gradle.testfixtures.ProjectBuilder
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -11,14 +13,14 @@ import java.io.File
 import java.security.MessageDigest
 
 /**
- * Exercises the bundled `app-icon-banner` CLI end to end. Requires a Freetype-enabled ImageMagick on
- * PATH. Excluded from the default `test` task; run via `./gradlew cliSmokeTest` on macOS.
+ * Exercises the bundled `app-icon-banner` CLI end to end. Requires a Freetype-enabled ImageMagick
+ * on PATH. Excluded from the default `test` task; run via `./gradlew cliSmokeTest` on macOS.
  */
 @Tag("cli-smoke")
 class CliSmokeTest {
 
     @Test
-    fun `stamps a banner, is idempotent, and leaves unmatched configs pristine`(@TempDir dir: File) {
+    fun `iOS — stamps a banner, is idempotent, and leaves unmatched configs pristine`(@TempDir dir: File) {
         val magick = imageMagickWithFreetype()
         assumeTrue(magick != null, "Freetype-enabled ImageMagick not available")
 
@@ -43,6 +45,93 @@ class CliSmokeTest {
         val releaseArgs = listOf(cli.path, "--config", "Release", "--appiconset", appiconset.path)
         assertEquals(0, run(dir, releaseArgs, env), "unmatched config should no-op")
         assertEquals(sha256(baseIcon), sha256(icon), "unmatched config must leave icons pristine")
+    }
+
+    @Test
+    fun `Android --no-base mode stamps icons directly and exits 0`(@TempDir dir: File) {
+        val magick = imageMagickWithFreetype()
+        assumeTrue(magick != null, "Freetype-enabled ImageMagick not available")
+
+        val cli = extractCli(dir)
+
+        // Simulate a mipmap directory with a legacy launcher icon.
+        val mipmapDir = File(dir, "mipmap-xxhdpi").apply { mkdirs() }
+        val icon = File(mipmapDir, "ic_launcher.png")
+        run(dir, listOf(magick!!, "-size", "144x144", "gradient:#1a73e8-#34a853", icon.path))
+        val originalSha = sha256(icon)
+
+        val args = listOf(
+            cli.path,
+            "--appiconset", mipmapDir.path,
+            "--no-base",
+            "--color", "#0288D1",
+            "--label", "DEBUG",
+        )
+        assertEquals(0, run(dir, args), "should stamp and exit 0")
+        assertNotEquals(originalSha, sha256(icon), "icon should be modified by the stamp")
+
+        // Re-run is idempotent: starting from the same stamped file, result should be same.
+        val stampedSha = sha256(icon)
+        assertEquals(0, run(dir, args), "second run should also succeed")
+        assertEquals(stampedSha, sha256(icon), "repeated --no-base stamps are idempotent via -strip")
+    }
+
+    @Test
+    fun `StampAndroidIconsTask stamps legacy and adaptive icons, copies monochrome unmodified`(
+        @TempDir dir: File,
+    ) {
+        val magick = imageMagickWithFreetype()
+        assumeTrue(magick != null, "Freetype-enabled ImageMagick not available")
+
+        // Build a minimal res/ structure: one density bucket with legacy, foreground, and monochrome.
+        val resDir = File(dir, "res").apply { mkdirs() }
+        val mipmapDir = File(resDir, "mipmap-xxhdpi").apply { mkdirs() }
+
+        val legacyIcon = File(mipmapDir, "ic_launcher.png")
+        val foregroundIcon = File(mipmapDir, "ic_launcher_foreground.png")
+        val monochromeIcon = File(mipmapDir, "ic_launcher_monochrome.png")
+
+        // 144×144 standard launcher size for xxhdpi; 432×432 for foreground/monochrome.
+        val im = magick!!
+        run(dir, listOf(im, "-size", "144x144", "gradient:#1a73e8-#34a853", legacyIcon.path))
+        run(dir, listOf(im, "-size", "432x432", "gradient:#1a73e8-#34a853", foregroundIcon.path))
+        run(dir, listOf(im, "-size", "432x432", "gradient:#888888-#444444", monochromeIcon.path))
+
+        val originalLegacySha = sha256(legacyIcon)
+        val originalForegroundSha = sha256(foregroundIcon)
+        val originalMonochromeSha = sha256(monochromeIcon)
+
+        // Instantiate the task via ProjectBuilder (supplies the Gradle object model; no plugin needed).
+        val project = ProjectBuilder.builder().withProjectDir(dir).build()
+        val task = project.tasks.register(
+            "stampDebugAndroidIcons",
+            StampAndroidIconsTask::class.java,
+        ).get()
+
+        val outputDir = File(dir, "build/generated/app-icon-banner/debug/res")
+        task.sourceResDir.set(resDir)
+        task.bannerColor.set("#0288D1")
+        task.bannerLabel.set("DEBUG")
+        task.iconName.set("ic_launcher")
+        task.outputDir.set(outputDir)
+
+        task.stamp()
+
+        val outMipmap = File(outputDir, "mipmap-xxhdpi")
+        assertTrue(outMipmap.exists(), "output mipmap directory should be created")
+
+        val outLegacy = File(outMipmap, "ic_launcher.png")
+        val outForeground = File(outMipmap, "ic_launcher_foreground.png")
+        val outMonochrome = File(outMipmap, "ic_launcher_monochrome.png")
+
+        assertTrue(outLegacy.exists(), "legacy icon should be in output")
+        assertNotEquals(originalLegacySha, sha256(outLegacy), "legacy icon should be stamped")
+
+        assertTrue(outForeground.exists(), "adaptive foreground should be in output")
+        assertNotEquals(originalForegroundSha, sha256(outForeground), "foreground should be stamped")
+
+        assertTrue(outMonochrome.exists(), "monochrome should be copied to output")
+        assertEquals(originalMonochromeSha, sha256(outMonochrome), "monochrome must NOT be stamped")
     }
 
     private fun extractCli(dir: File): File {

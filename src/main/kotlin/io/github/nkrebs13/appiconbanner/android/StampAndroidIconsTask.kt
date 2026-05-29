@@ -1,6 +1,7 @@
 package io.github.nkrebs13.appiconbanner.android
 
 import org.gradle.api.DefaultTask
+import org.gradle.api.tasks.CacheableTask
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.Input
@@ -37,6 +38,7 @@ private val STAMPABLE_EXTENSIONS = setOf("png", "webp")
  * Config-cache safe: holds no [org.gradle.api.Project] reference. The CLI is extracted from
  * the plugin jar on every task execution.
  */
+@CacheableTask
 abstract class StampAndroidIconsTask : DefaultTask() {
 
     /** The Android `res/` directory to read source icons from (e.g. `src/androidMain/res`). */
@@ -71,6 +73,19 @@ abstract class StampAndroidIconsTask : DefaultTask() {
         output.deleteRecursively()
         output.mkdirs()
 
+        val mipmapDirs = source.listFiles()
+            ?.filter { it.isDirectory && it.name.startsWith("mipmap-") && !it.name.contains("anydpi") }
+            ?: emptyList()
+
+        if (mipmapDirs.isEmpty()) {
+            logger.warn(
+                "app-icon-banner: no mipmap-* directories found in ${source.path}. " +
+                    "Check that androidResDir points to your Android res/ directory. " +
+                    "Default: src/androidMain/res (Compose Multiplatform) or src/main/res.",
+            )
+            return
+        }
+
         // Work area alongside the output directory — outside res/ so AGP won't process it.
         val workRoot = File(output.parentFile, "stamp-work").also {
             it.deleteRecursively(); it.mkdirs()
@@ -94,9 +109,8 @@ abstract class StampAndroidIconsTask : DefaultTask() {
 
         var totalStamped = 0
 
-        source.listFiles()
-            ?.filter { it.isDirectory && it.name.startsWith("mipmap-") && !it.name.contains("anydpi") }
-            ?.forEach { mipmapDir ->
+        try {
+            mipmapDirs.forEach { mipmapDir ->
                 val outMipmapDir = File(output, mipmapDir.name).apply { mkdirs() }
 
                 val legacyFiles = findIcons(mipmapDir, legacyNames)
@@ -127,8 +141,9 @@ abstract class StampAndroidIconsTask : DefaultTask() {
                 findIcons(mipmapDir, monochromeNames)
                     .forEach { it.copyTo(File(outMipmapDir, it.name), overwrite = true) }
             }
-
-        workRoot.deleteRecursively()
+        } finally {
+            workRoot.deleteRecursively()
+        }
 
         logger.lifecycle(
             "app-icon-banner: stamped ${totalStamped} Android icon(s) for '${label}' (${color})",

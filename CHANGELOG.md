@@ -7,11 +7,16 @@
 ### Added
 - Initial release of `io.github.nkrebs13.app-icon-banner` Gradle plugin.
 - `appIconBanner { }` DSL with `buildType`, `flavor`, `variant`, `iosConfiguration` blocks and a `debugDefault` toggle.
-- Android: uses ImageMagick (same renderer as iOS) for visual consistency across platforms. Stamps
-  all launcher icon density buckets (`mipmap-*`): legacy icons, round icons, and the adaptive icon
-  foreground layer (positioned inside the 72/108 dp safe zone). Monochrome (Material You) icons
-  are copied without stamping — the launcher applies its own system tint. Generated into a build
-  directory via `variant.sources.res?.addGeneratedSourceDirectory`; no committed files, no gitignore.
+- Android: uses ImageMagick (same renderer as iOS) for visual consistency across platforms.
+  Stamps all launcher icon density buckets (`mipmap-{mdpi|hdpi|xhdpi|xxhdpi|xxxhdpi}/`):
+  - `ic_launcher.{png,webp}` — legacy launcher icon, flat geometry (no bottom inset).
+  - `ic_launcher_round.{png,webp}` — round launcher icon, same flat geometry.
+  - `ic_launcher_foreground.{png,webp}` — adaptive icon foreground, stamped inside the
+    72/108 dp safe zone (22% height, 20% bottom inset) to survive all launcher mask shapes.
+  - `ic_launcher_monochrome.{png,webp}` — copied without stamping; the launcher applies a
+    wallpaper-derived solid tint at display time, making a banner invisible.
+  Generated into `build/` via `variant.sources.res?.addGeneratedSourceDirectory` (highest AGP
+  merge priority). No committed files, no gitignore needed.
 - iOS: `exportIosBannerConfig` task installs a bash + ImageMagick CLI and writes `app-icon-banner.config`. The CLI is idempotent (regenerates from a pristine `*-base.appiconset`) and forces sRGB/TrueColor so grayscale source icons render a colored band.
 - KMP multi-module support: override `exportIosBannerConfig` output paths to place files next to `iosApp/`.
 - Three-tier `debug` / `internal` / `release` recipe with `applicationIdSuffix` for side-by-side device install.
