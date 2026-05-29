@@ -1,151 +1,133 @@
+<div align="center">
+
 # App Icon Banner
 
-A Gradle plugin that stamps a **color + label banner** onto your app icons per build variant —
-on **both Android and iOS** — from a single DSL. Tell debug builds apart from release at a glance on
-the home screen.
+**One DSL. Android + iOS. Know your build at a glance.**
 
-- **Android:** wraps the excellent [easylauncher](https://github.com/usefulness/easylauncher-gradle-plugin)
-  plugin, rendering one ribbon per variant.
-- **iOS:** ships a small CLI you wire into an Xcode "Run Script" build phase; it stamps the icon set
-  for the current Xcode configuration.
+[![Build](https://github.com/nkrebs13/app-icon-banner/actions/workflows/build.yml/badge.svg)](https://github.com/nkrebs13/app-icon-banner/actions/workflows/build.yml)
+[![Gradle Plugin Portal](https://img.shields.io/gradle-plugin-portal/v/io.github.nkrebs13.app-icon-banner)](https://plugins.gradle.org/plugin/io.github.nkrebs13.app-icon-banner)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-One `appIconBanner { }` block drives both platforms.
+<img src="docs/demo.png" alt="Three app icons: debug (blue banner), internal (orange banner), release (clean)" width="720">
+
+</div>
+
+A Gradle plugin for **Kotlin Multiplatform** projects that stamps a color + label banner onto app icons per build variant. A single `appIconBanner { }` block in your Android module drives banner rendering for both Android (wraps [easylauncher](https://github.com/usefulness/easylauncher-gradle-plugin)) and iOS (exports a CLI for your Xcode Run Script).
 
 ## Requirements
 
-- Gradle 8.4+, Android Gradle Plugin 8.4+, JDK 17
-- iOS stamping needs a Freetype-enabled [ImageMagick](https://imagemagick.org) on the build machine
-  (`brew install imagemagick`)
+Gradle 8.4+, Android Gradle Plugin 8.4+, JDK 17. iOS stamping additionally requires a Freetype-enabled [ImageMagick](https://imagemagick.org) on the build machine:
+
+```bash
+brew install imagemagick
+```
 
 ## Install
 
-Apply the plugin in your Android application module, **after** the Android application plugin:
+Apply the plugin in your Android application module **after** the Android plugin:
 
 ```kotlin
-// app/build.gradle.kts (or app/android/build.gradle.kts)
+// app/build.gradle.kts  (or androidApp/build.gradle.kts in a KMP project)
 plugins {
     id("com.android.application")
     id("io.github.nkrebs13.app-icon-banner") version "0.1.0"
 }
 ```
 
-That's it for the default behaviour: **debug builds get a blue `DEBUG` banner, release builds stay
-clean.** No configuration required.
+That's it for Android. Debug builds immediately get a blue **DEBUG** banner — no configuration required.
 
 ## Configuration
 
 ```kotlin
 appIconBanner {
-    // Applies to every variant of this build type (e.g. phoneDebug + metaDebug)
-    buildType("debug") { color = "#0288D1"; label = "DEBUG" }
+    buildType("debug")    { color = "#0288D1"; label = "DEBUG" }
+    buildType("internal") { color = "#FF6F00"; label = "INTERNAL" }
+    // release → no banner
 
-    // Applies to every variant of this flavor (e.g. metaDebug + metaRelease)
-    flavor("meta") { color = "#FF6F00"; label = "META" }
+    // Flavor-specific (applies to every variant of that flavor)
+    flavor("meta")        { color = "#7B1FA2"; label = "META" }
 
-    // Applies to exactly one variant — most specific, wins over flavor/buildType
-    variant("metaDebug") { color = "#7B1FA2"; label = "META·DBG" }
+    // Most specific wins (overrides buildType + flavor for exactly this variant)
+    variant("metaDebug")  { color = "#1565C0"; label = "META·DBG" }
 
-    // Disable the built-in debug default entirely
-    // debugDefault = false
-
-    // iOS only: when an Xcode configuration name doesn't match an Android build type
-    // (e.g. a custom "Firebase" configuration), map it explicitly:
+    // iOS only: map a custom Xcode configuration that has no Android equivalent
     iosConfiguration("Firebase") { color = "#FF6F00"; label = "FIREBASE" }
 }
 ```
 
-### Three-tier recipe (debug / internal / release)
+**Resolution priority** (most specific wins, never stacked): `variant` > `flavor` > `buildType` > built-in debug default.
 
-The most common setup: distinguish dev builds, tester distributions (Firebase App
-Distribution / TestFlight), and production at a glance. Pair each banner with an
-`applicationIdSuffix` so all three install side-by-side on a tester device.
+- `color` must be `#RRGGBB`. Defaults to `#0288D1` (blue) when omitted.
+- `label` defaults to the slot name when omitted.
+- Set `debugDefault = false` to opt out of the automatic debug banner.
+
+### Three-tier recipe
+
+The most common pattern: debug builds on-device, a tester distribution (Firebase App Distribution / TestFlight), and a clean production build — all installable side-by-side.
 
 ```kotlin
 android {
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
-            // ...
         }
         create("internal") {
             applicationIdSuffix = ".internal"
-            // Library modules don't know about a custom buildType; tell AGP to resolve their
-            // deps to the `release` variant (then `debug` if a module is debug-only).
+            // Library modules need this to resolve their dependencies to the release variant.
             matchingFallbacks += listOf("release", "debug")
             isMinifyEnabled = true
-            // ...release-like config...
         }
-        release { /* no suffix */ }
+        release { /* no suffix, no banner */ }
     }
 }
 
 appIconBanner {
     buildType("debug")    { color = "#0288D1"; label = "DEBUG" }
     buildType("internal") { color = "#FF6F00"; label = "INTERNAL" }
-    // release: no entry -> no banner
 }
 ```
 
-**Gotcha:** any buildType beyond `debug`/`release` needs `matchingFallbacks` on the
-consumer side or AGP throws `NoMatchingVariantSelectionException` when resolving
-library dependencies. This is an Android Gradle concern, not the plugin's — but adding a
-new buildType to drive a banner is the most common time you'll hit it.
-
-### Resolution order
-
-For each variant the **most specific** match wins — banners never stack:
-
-`variant` > `flavor` > `buildType` > built-in debug default > *(no banner)*
-
-- `color` defaults to `#0288D1` (blue) when omitted.
-- `label` defaults to the slot name (e.g. `"debug"`) when omitted.
+> **Gotcha:** any `buildType` beyond `debug`/`release` needs `matchingFallbacks` on each library module or AGP throws `NoMatchingVariantSelectionException`. This is an Android Gradle concern — the banner plugin is just the most common trigger.
 
 ## iOS setup
 
-The Android side is automatic. iOS needs a one-time wiring (icons are built by Xcode, not Gradle).
+<img src="docs/before-after.png" alt="Before: clean icon. After: icon with DEBUG banner." width="480">
 
-1. **Split the icon set into a pristine base.** Copy your committed
-   `AppIcon.appiconset` to `AppIcon-base.appiconset` and gitignore the generated output set:
+The iOS banner is stamped by a bash + ImageMagick CLI at Xcode build time.
 
-   ```bash
-   cd YourApp/Assets.xcassets
-   cp -R AppIcon.appiconset AppIcon-base.appiconset
-   echo "AppIcon.appiconset/" >> ../../.gitignore   # adjust path to your repo
-   git add AppIcon-base.appiconset
-   ```
+**1. Split your icon set into a pristine base** (first time only):
 
-   The CLI regenerates `AppIcon.appiconset` from `AppIcon-base.appiconset` on every build, so it is
-   **idempotent** — re-running never double-stamps.
+```bash
+cd YourApp/Assets.xcassets
+cp -R AppIcon.appiconset AppIcon-base.appiconset
+echo "YourApp/Assets.xcassets/AppIcon.appiconset/" >> ../../.gitignore
+git add AppIcon-base.appiconset
+```
 
-2. **Export the config + CLI** from your Android module:
+The CLI regenerates `AppIcon.appiconset` from `AppIcon-base.appiconset` on every Xcode build — re-running never double-stamps.
 
-   ```bash
-   ./gradlew exportIosBannerConfig
-   ```
+**2. Export the config + CLI** from your Android module:
 
-   This writes `app-icon-banner.config` and installs `scripts/app-icon-banner`. Commit both.
+```bash
+./gradlew exportIosBannerConfig
+```
 
-3. **Add a Run Script build phase** in Xcode (target → Build Phases → + → New Run Script Phase),
-   placed **before** "Copy Bundle Resources", with "Based on dependency analysis" unchecked:
+Commits both `app-icon-banner.config` and `scripts/app-icon-banner`.
 
-   ```bash
-   "${SRCROOT}/scripts/app-icon-banner" \
-       --config "$CONFIGURATION" \
-       --appiconset "$SRCROOT/YourApp/Assets.xcassets/AppIcon.appiconset"
-   ```
+**3. Add a Run Script phase** in Xcode (target → Build Phases → + → New Run Script Phase), **before** "Copy Bundle Resources", **uncheck** "Based on dependency analysis":
 
-The script reads `$CONFIGURATION` (e.g. `Debug`, `Release`, `Firebase`), looks it up in
-`app-icon-banner.config`, and stamps accordingly. Configurations with no entry are left pristine.
+```bash
+"${SRCROOT}/scripts/app-icon-banner" \
+    --config "$CONFIGURATION" \
+    --appiconset "$SRCROOT/YourApp/Assets.xcassets/AppIcon.appiconset"
+```
 
-### KMP / multi-module projects: redirecting the iOS outputs
+### KMP: redirect iOS outputs to `iosApp/`
 
-In a typical KMP app the Android plugin is applied in (e.g.) `:app:android`, so the
-default output location for `app-icon-banner.config` and `scripts/app-icon-banner` ends up
-inside the Android module — inconveniently far from `iosApp/`. Override the task's outputs
-to land next to the iOS app instead:
+In a typical KMP project the Android plugin lives in `:composeApp` or `:androidApp`, so `exportIosBannerConfig` writes to that module's directory by default. Redirect it to sit next to the iOS app instead:
 
 ```kotlin
-// app/android/build.gradle.kts
+// androidApp/build.gradle.kts
 import io.github.nkrebs13.appiconbanner.ios.ExportIosBannerConfigTask
 
 tasks.named<ExportIosBannerConfigTask>("exportIosBannerConfig") {
@@ -154,52 +136,32 @@ tasks.named<ExportIosBannerConfigTask>("exportIosBannerConfig") {
 }
 ```
 
-The Xcode Run Script then references `${SRCROOT}/scripts/app-icon-banner` as usual (since
-`$SRCROOT` for the iOS target IS `iosApp/`).
+The Xcode Run Script then references `${SRCROOT}/scripts/app-icon-banner` as usual since `$SRCROOT` for the iOS target is `iosApp/`.
 
-### CLI options
+### CLI tuning
+
+The defaults are sized for the iOS squircle mask — the band is inset so no descenders are clipped.
 
 ```
-app-icon-banner --config <name> --appiconset <path/AppIcon.appiconset>
-                [--base <path/AppIcon-base.appiconset>]   # default: <name>-base.appiconset
-                [--config-file <app-icon-banner.config>]  # default: $SRCROOT/app-icon-banner.config
-                [--font <path-to.ttf>]                    # default: a macOS system font
-                [--height-pct N]                          # band height as % of icon (default: 18)
-                [--bottom-inset-pct N]                    # band lifted N% above icon bottom (default: 8)
-                [--text-pct N]                            # text size as % of band height (default: 55)
+--height-pct N        band height as % of icon (default: 18)
+--bottom-inset-pct N  band lifted N% above bottom edge (default: 8, clears squircle curve)
+--text-pct N          text size as % of band height (default: 55)
+--font <path>         explicit TTF/TTC path (macOS system fonts used by default)
 ```
 
-The defaults are tuned to be **safe inside the iOS squircle mask** — at 8% bottom inset and 18%
-height, no letter descenders are clipped on standard iOS app icons. Raise `--bottom-inset-pct` if
-you're stamping a non-iOS asset and want the band flush with the bottom edge, or for icons with
-unusually aggressive corner rounding.
+## Troubleshooting
 
-## How it works
+**`ImageMagick not found`** — Install: `brew install imagemagick`. If it is installed but Xcode can't find it, add `export PATH="/opt/homebrew/bin:$PATH"` at the top of your Run Script.
 
-| | Android | iOS |
-|---|---|---|
-| Renderer | easylauncher (Java2D) | ImageMagick CLI |
-| When | during the variant's resource generation | Xcode "Run Script" phase |
-| Source of truth | `appIconBanner { }` | same DSL, exported to `app-icon-banner.config` |
-| Idempotency | build intermediates (automatic) | regenerated from `*-base.appiconset` |
+**`this ImageMagick build lacks the Freetype delegate`** — Reinstall the full build: `brew reinstall imagemagick`.
 
-## Publishing (maintainers)
+**`no usable font found`** — Pass a font path explicitly with `--font /path/to/Font.ttf`. On Linux CI use a DejaVu or similar system font.
 
-Plugin Portal credentials live in `~/.gradle/gradle.properties`:
+**`appIconBanner: invalid color '...'`** — Gradle build error. Use `#RRGGBB` format (six hex digits), e.g. `#FF6F00`.
 
-```properties
-gradle.publish.key=...
-gradle.publish.secret=...
-```
+**`NoMatchingVariantSelectionException`** — Add `matchingFallbacks` to each library module for any custom build type. See the three-tier recipe above.
 
-```bash
-./gradlew publishPlugins
-```
-
-## Roadmap
-
-- **v2:** a Swift Package Manager build-tool plugin that vendors the same CLI, removing the manual
-  Xcode Run Script step for SPM-based iOS apps.
+**Squircle clipping** — Increase `--bottom-inset-pct` (try 12) if the banner is still clipped by the corner curve on your device.
 
 ## License
 

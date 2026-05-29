@@ -4,6 +4,7 @@ import io.github.nkrebs13.appiconbanner.ios.ExportIosBannerConfigTask
 import org.gradle.testfixtures.ProjectBuilder
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -18,6 +19,16 @@ class AppIconBannerPluginTest {
 
         assertNotNull(project.extensions.findByName("appIconBanner"))
         assertNotNull(project.tasks.findByName("exportIosBannerConfig"))
+    }
+
+    @Test
+    fun `plugin applied to a non-Android project registers only the iOS task`() {
+        // iOS-only or plain Kotlin project — no AGP present.
+        val project = ProjectBuilder.builder().build()
+        project.pluginManager.apply("io.github.nkrebs13.app-icon-banner")
+        assertNotNull(project.tasks.findByName("exportIosBannerConfig"))
+        assertNull(project.extensions.findByName("easylauncher"))
+        assertTrue(project.tasks.names.none { it.contains("easylauncher", ignoreCase = true) })
     }
 
     @Test

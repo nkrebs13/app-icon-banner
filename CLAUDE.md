@@ -21,11 +21,21 @@ src/test/kotlin/...                — ExtensionTest (logic), PluginTest (Projec
 
 ```bash
 export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
-./gradlew build      # compile + validatePlugins + tests
-./gradlew test       # 12 tests; CliSmokeTest self-skips if ImageMagick lacks Freetype
+./gradlew build           # compile + validatePlugins + 15 unit tests (cli-smoke excluded)
+./gradlew cliSmokeTest    # CLI end-to-end test (macOS only, needs ImageMagick with Freetype)
+./gradlew apiDump         # regenerate api/app-icon-banner.api after intentional API changes
 ```
 
 Plugin id: `io.github.nkrebs13.app-icon-banner`. Implementation class: `…appiconbanner.AppIconBannerPlugin`.
+
+## Quality bar
+
+**This is a public digital portfolio project.** Every file (README, code, tests, CLI, changelog) is a public signal of senior engineering quality. The bar: would a senior Gradle plugin engineer at Google or JetBrains approve this without notes?
+
+- README changes must be verified by Playwright at desktop (1440×900) AND mobile (390×844) before merging
+- PR flow: `/simplify` → `/review` → `/autopilot`
+- Any public API change requires `./gradlew apiDump` to update `api/app-icon-banner.api`
+- Visual assets generated via `/asset-gen` and iterated until portfolio-quality
 
 ## Key design decisions
 

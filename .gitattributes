@@ -1,0 +1,12 @@
+# Normalize line endings to LF on checkout for all text files.
+* text=auto eol=lf
+
+# Belt-and-suspenders for the bash CLI: always LF even if git heuristic guesses binary.
+src/main/resources/app-icon-banner text eol=lf
+
+# Binary files — never touch line endings.
+*.png binary
+*.jar binary
+
+# gradlew.bat must stay CRLF to execute on Windows.
+gradlew.bat text eol=crlf

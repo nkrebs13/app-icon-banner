@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assumptions.assumeTrue
+import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.io.File
@@ -11,8 +12,9 @@ import java.security.MessageDigest
 
 /**
  * Exercises the bundled `app-icon-banner` CLI end to end. Requires a Freetype-enabled ImageMagick on
- * PATH; the test self-skips otherwise so it stays green on machines/CI without it.
+ * PATH. Excluded from the default `test` task; run via `./gradlew cliSmokeTest` on macOS.
  */
+@Tag("cli-smoke")
 class CliSmokeTest {
 
     @Test

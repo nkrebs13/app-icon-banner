@@ -2,19 +2,34 @@ package io.github.nkrebs13.appiconbanner
 
 import org.gradle.api.Action
 
+// #RRGGBB only — matches what java.awt.Color.decode() (used by easylauncher) and ImageMagick
+// both accept unambiguously. 4-digit #ARGB and 8-digit #AARRGGBB throw NumberFormatException in
+// java.awt.Color.decode() and are rejected here to surface the error at DSL configuration time.
+private val COLOR_REGEX = Regex("^#[0-9A-Fa-f]{6}$")
+
 /**
  * Mutable holder configured inside a `buildType { }` / `flavor { }` / `variant { }` /
- * `iosConfiguration { }` block. [color] defaults to [AppIconBannerExtension.DEFAULT_COLOR] and
- * [label] defaults to the slot name when left unset.
+ * `iosConfiguration { }` block.
+ *
+ * [color] must be `#RRGGBB` (six hex digits, e.g. `#0288D1`); defaults to
+ * [AppIconBannerExtension.DEFAULT_COLOR] when omitted.
+ * [label] must not contain `|` (used as config-file field separator); defaults to the slot name.
  */
-open class BannerSpec {
+class BannerSpec {
     var color: String? = null
     var label: String? = null
 
-    internal fun toConfig(fallbackLabel: String) = BannerConfig(
-        color = color ?: AppIconBannerExtension.DEFAULT_COLOR,
-        label = label ?: fallbackLabel,
-    )
+    internal fun toConfig(fallbackLabel: String): BannerConfig {
+        val resolvedColor = color ?: AppIconBannerExtension.DEFAULT_COLOR
+        val resolvedLabel = label ?: fallbackLabel
+        require(COLOR_REGEX.matches(resolvedColor)) {
+            "appIconBanner: invalid color '$resolvedColor' — must be #RRGGBB (six hex digits, e.g. #0288D1)"
+        }
+        require('|' !in resolvedLabel) {
+            "appIconBanner: label '$resolvedLabel' must not contain '|' — it is used as the config file field separator"
+        }
+        return BannerConfig(color = resolvedColor, label = resolvedLabel)
+    }
 }
 
 /**
@@ -71,6 +86,7 @@ open class AppIconBannerExtension {
         variants[variantName]?.let { return it.toConfig(variantName) }
         flavorNames.forEach { f -> flavors[f]?.let { return it.toConfig(f) } }
         buildTypeName?.let { bt -> buildTypes[bt]?.let { return it.toConfig(bt) } }
+        // AGP always emits lowercase build type names ("debug", "release") — case-sensitive match is correct.
         if (debugDefault && buildTypeName.equals(DEBUG_BUILD_TYPE, ignoreCase = false)) {
             return DEFAULT_DEBUG
         }
@@ -80,8 +96,11 @@ open class AppIconBannerExtension {
     /** Resolve the banner for an iOS Xcode configuration name, or null for no banner. */
     internal fun resolveIos(configurationName: String): BannerConfig? {
         iosConfigs[configurationName]?.let { return it.toConfig(configurationName) }
+        // Xcode configuration names are Title-cased ("Debug", "Release") but the user writes DSL
+        // build type names in lowercase — bridge the gap with case-insensitive lookup.
         buildTypes.entries.firstOrNull { it.key.equals(configurationName, ignoreCase = true) }
             ?.let { return it.value.toConfig(it.key) }
+        // Same case-insensitive logic for the debug default ("Debug" Xcode config → "debug" constant).
         if (debugDefault && configurationName.equals(DEBUG_BUILD_TYPE, ignoreCase = true)) {
             return DEFAULT_DEBUG
         }

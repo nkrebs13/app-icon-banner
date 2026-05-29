@@ -2,7 +2,9 @@ package io.github.nkrebs13.appiconbanner
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 
 class AppIconBannerExtensionTest {
 
@@ -90,5 +92,31 @@ class AppIconBannerExtensionTest {
         val lines = ext.iosConfigLines()
         // debugDefault seeds "Debug" then the explicit debug build type overrides it to the same key
         assertEquals(listOf("Debug|#0288D1|DEBUG", "Firebase|#FF6F00|FIREBASE"), lines)
+    }
+
+    @Test
+    fun `invalid color throws with a clear message`() {
+        val ext = extension { buildType("debug") { color = "notacolor" } }
+        val ex = assertThrows<IllegalArgumentException> {
+            ext.resolveAndroid("phoneDebug", listOf("phone"), "debug")
+        }
+        assertTrue(ex.message!!.contains("notacolor"))
+        assertTrue(ex.message!!.contains("appIconBanner"))
+    }
+
+    @Test
+    fun `label containing pipe throws with a clear message`() {
+        val ext = extension { buildType("debug") { label = "lab|el" } }
+        val ex = assertThrows<IllegalArgumentException> {
+            ext.resolveAndroid("phoneDebug", listOf("phone"), "debug")
+        }
+        assertTrue(ex.message!!.contains("|"))
+        assertTrue(ex.message!!.contains("appIconBanner"))
+    }
+
+    @Test
+    fun `null buildType returns no banner and does not throw`() {
+        // AGP can pass a null buildType for headerless APK variants (e.g. dynamic feature modules).
+        assertNull(extension().resolveAndroid("someVariant", emptyList(), null))
     }
 }

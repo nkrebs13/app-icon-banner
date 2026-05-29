@@ -1,6 +1,7 @@
 plugins {
     `kotlin-dsl`
     alias(libs.plugins.plugin.publish)
+    alias(libs.plugins.binary.compat.validator)
 }
 
 group = "io.github.nkrebs13"
@@ -40,6 +41,26 @@ gradlePlugin {
     }
 }
 
+apiValidation {
+    // Suppress the synthetic SAM adapter Kotlin generates for Action<T> lambdas in inline
+    // positions — it is an implementation detail, not a public API surface.
+    ignoredClasses.add("io.github.nkrebs13.appiconbanner.AppIconBannerPlugin\$inlined\$sam\$i\$org_gradle_api_Action\$0")
+}
+
 tasks.withType<Test>().configureEach {
-    useJUnitPlatform()
+    useJUnitPlatform {
+        // CLI smoke test requires a Freetype-enabled ImageMagick on PATH.
+        // Run explicitly via ./gradlew cliSmokeTest (on macOS with ImageMagick installed).
+        excludeTags("cli-smoke")
+    }
+}
+
+tasks.register<Test>("cliSmokeTest") {
+    group = "verification"
+    description = "Runs the CLI smoke test (requires Freetype-enabled ImageMagick on PATH)."
+    classpath = sourceSets["test"].runtimeClasspath
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    useJUnitPlatform {
+        includeTags("cli-smoke")
+    }
 }

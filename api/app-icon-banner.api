@@ -1,0 +1,56 @@
+public class io/github/nkrebs13/appiconbanner/AppIconBannerExtension {
+	public static final field Companion Lio/github/nkrebs13/appiconbanner/AppIconBannerExtension$Companion;
+	public static final field DEFAULT_COLOR Ljava/lang/String;
+	public fun <init> ()V
+	public final fun buildType (Ljava/lang/String;Lorg/gradle/api/Action;)V
+	public final fun flavor (Ljava/lang/String;Lorg/gradle/api/Action;)V
+	public final fun getDebugDefault ()Z
+	public final fun iosConfiguration (Ljava/lang/String;Lorg/gradle/api/Action;)V
+	public final fun setDebugDefault (Z)V
+	public final fun variant (Ljava/lang/String;Lorg/gradle/api/Action;)V
+}
+
+public final class io/github/nkrebs13/appiconbanner/AppIconBannerExtension$Companion {
+}
+
+public final class io/github/nkrebs13/appiconbanner/AppIconBannerPlugin : org/gradle/api/Plugin {
+	public static final field Companion Lio/github/nkrebs13/appiconbanner/AppIconBannerPlugin$Companion;
+	public static final field EXPORT_IOS_TASK Ljava/lang/String;
+	public static final field EXTENSION_NAME Ljava/lang/String;
+	public fun <init> ()V
+	public synthetic fun apply (Ljava/lang/Object;)V
+	public fun apply (Lorg/gradle/api/Project;)V
+}
+
+public final class io/github/nkrebs13/appiconbanner/AppIconBannerPlugin$Companion {
+}
+
+public final class io/github/nkrebs13/appiconbanner/BannerConfig {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Lio/github/nkrebs13/appiconbanner/BannerConfig;
+	public static synthetic fun copy$default (Lio/github/nkrebs13/appiconbanner/BannerConfig;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lio/github/nkrebs13/appiconbanner/BannerConfig;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getColor ()Ljava/lang/String;
+	public final fun getLabel ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class io/github/nkrebs13/appiconbanner/BannerSpec {
+	public fun <init> ()V
+	public final fun getColor ()Ljava/lang/String;
+	public final fun getLabel ()Ljava/lang/String;
+	public final fun setColor (Ljava/lang/String;)V
+	public final fun setLabel (Ljava/lang/String;)V
+}
+
+public abstract class io/github/nkrebs13/appiconbanner/ios/ExportIosBannerConfigTask : org/gradle/api/DefaultTask {
+	public fun <init> ()V
+	public final fun export ()V
+	public abstract fun getConfigLines ()Lorg/gradle/api/provider/ListProperty;
+	public abstract fun getOutputCli ()Lorg/gradle/api/file/RegularFileProperty;
+	public abstract fun getOutputConfig ()Lorg/gradle/api/file/RegularFileProperty;
+}
+

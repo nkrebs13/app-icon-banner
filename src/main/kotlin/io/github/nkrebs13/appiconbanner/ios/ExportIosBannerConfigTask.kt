@@ -7,6 +7,8 @@ import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.TaskAction
 
+private const val CLI_RESOURCE = "/app-icon-banner"
+
 /**
  * Writes `app-icon-banner.config` (one `name|color|label` line per iOS configuration) and installs
  * the bundled `app-icon-banner` stamping CLI into the consumer's `scripts/` directory. Both outputs
@@ -43,9 +45,5 @@ abstract class ExportIosBannerConfigTask : DefaultTask() {
             "app-icon-banner: wrote ${configLines.get().size} config line(s) to " +
                 "${configFile.name} and installed CLI at ${cliFile.path}",
         )
-    }
-
-    private companion object {
-        const val CLI_RESOURCE = "/app-icon-banner"
     }
 }
