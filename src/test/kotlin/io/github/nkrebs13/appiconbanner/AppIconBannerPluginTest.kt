@@ -32,6 +32,27 @@ class AppIconBannerPluginTest {
     }
 
     @Test
+    fun `extension defaults for android properties are correct`() {
+        val project = ProjectBuilder.builder().build()
+        project.pluginManager.apply("io.github.nkrebs13.app-icon-banner")
+        val ext = project.extensions.getByType(AppIconBannerExtension::class.java)
+        assertEquals("ic_launcher", ext.androidIconName, "androidIconName default should be ic_launcher")
+        assertNull(ext.androidResDir, "androidResDir default should be null (auto-detect)")
+    }
+
+    @Test
+    fun `variantName sanitization produces valid Android resource name components`() {
+        // The plugin wires variantName via: variant.name.lowercase().replace(Regex("[^a-z0-9]"), "_")
+        // Test that expression directly to catch regressions.
+        fun sanitize(name: String) = name.lowercase().replace(Regex("[^a-z0-9]"), "_")
+        assertEquals("debug", sanitize("debug"))
+        assertEquals("metadebug", sanitize("metaDebug"))
+        assertEquals("phone_debug", sanitize("phone-debug"))
+        assertEquals("release", sanitize("Release"))
+        assertTrue(sanitize("metaDebug").all { it.isLetterOrDigit() || it == '_' })
+    }
+
+    @Test
     fun `export task writes the config file and installs the CLI`(@TempDir tempDir: File) {
         val project = ProjectBuilder.builder().withProjectDir(tempDir).build()
         project.pluginManager.apply("io.github.nkrebs13.app-icon-banner")

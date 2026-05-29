@@ -134,6 +134,81 @@ class CliSmokeTest {
         assertEquals(originalMonochromeSha, sha256(outMonochrome), "monochrome must NOT be stamped")
     }
 
+    @Test
+    fun `StampAndroidIconsTask handles XML vector foreground via layer-list overlay`(
+        @TempDir dir: File,
+    ) {
+        val magick = imageMagickWithFreetype()
+        assumeTrue(magick != null, "Freetype-enabled ImageMagick not available")
+
+        // Build a res/ tree with a raster legacy icon and an XML vector foreground
+        // (no raster ic_launcher_foreground.png — triggers the XML overlay path).
+        val resDir = File(dir, "res").apply { mkdirs() }
+        val mipmapDir = File(resDir, "mipmap-xxhdpi").apply { mkdirs() }
+        val anydpiDir = File(resDir, "mipmap-anydpi-v26").apply { mkdirs() }
+        val drawableDir = File(resDir, "drawable").apply { mkdirs() }
+
+        // Legacy launcher icon (raster).
+        val legacyIcon = File(mipmapDir, "ic_launcher.png")
+        run(dir, listOf(magick!!, "-size", "144x144", "gradient:#1a73e8-#34a853", legacyIcon.path))
+
+        // XML vector foreground (stub — real content doesn't matter, just needs to exist as XML).
+        File(drawableDir, "ic_launcher_foreground.xml").writeText(
+            """<?xml version="1.0" encoding="utf-8"?><vector xmlns:android="http://schemas.android.com/apk/res/android"/>""",
+        )
+        // Background drawable (referenced from adaptive-icon XML).
+        File(drawableDir, "ic_launcher_background.xml").writeText(
+            """<?xml version="1.0" encoding="utf-8"?><shape xmlns:android="http://schemas.android.com/apk/res/android"/>""",
+        )
+        // Adaptive-icon XML referencing the XML vector foreground.
+        File(anydpiDir, "ic_launcher.xml").writeText(
+            """<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@drawable/ic_launcher_background"/>
+    <foreground android:drawable="@drawable/ic_launcher_foreground"/>
+</adaptive-icon>""",
+        )
+
+        val project = ProjectBuilder.builder().withProjectDir(dir).build()
+        val task = project.tasks.register(
+            "stampDebugAndroidIcons",
+            StampAndroidIconsTask::class.java,
+        ).get()
+
+        val outputDir = File(dir, "build/generated/app-icon-banner/debug/res")
+        task.sourceResDir.set(resDir)
+        task.bannerColor.set("#0288D1")
+        task.bannerLabel.set("DEBUG")
+        task.iconName.set("ic_launcher")
+        task.variantName.set("debug")
+        task.outputDir.set(outputDir)
+
+        task.stamp()
+
+        // Legacy icon should be stamped.
+        val outLegacy = File(outputDir, "mipmap-xxhdpi/ic_launcher.png")
+        assertTrue(outLegacy.exists(), "legacy icon should be in output")
+
+        // Banner-only PNG should be generated for the adaptive overlay.
+        val outBannerPng = File(outputDir, "mipmap-xxhdpi/app_icon_banner_debug.png")
+        assertTrue(outBannerPng.exists(), "banner PNG for adaptive overlay should be generated")
+        assertTrue(outBannerPng.length() > 0, "banner PNG should be non-empty")
+
+        // Layer-list XML should be written with the correct references.
+        val layerList = File(outputDir, "drawable/ic_launcher_foreground_debug.xml")
+        assertTrue(layerList.exists(), "layer-list XML should be written")
+        val layerListContent = layerList.readText()
+        assertTrue("@drawable/ic_launcher_foreground" in layerListContent, "layer-list must reference original foreground")
+        assertTrue("@mipmap/app_icon_banner_debug" in layerListContent, "layer-list must reference banner PNG")
+
+        // Updated adaptive-icon XML should reference the new layer-list foreground.
+        val updatedAdaptive = File(outputDir, "mipmap-anydpi-v26/ic_launcher.xml")
+        assertTrue(updatedAdaptive.exists(), "updated adaptive-icon XML should be written")
+        val adaptiveContent = updatedAdaptive.readText()
+        assertTrue("@drawable/ic_launcher_foreground_debug" in adaptiveContent, "adaptive icon must use layer-list foreground")
+        assertTrue("@drawable/ic_launcher_background" in adaptiveContent, "background ref should be preserved")
+    }
+
     private fun extractCli(dir: File): File {
         val cli = File(dir, "app-icon-banner")
         javaClass.getResourceAsStream("/app-icon-banner")!!.use { input ->

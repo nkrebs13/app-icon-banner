@@ -132,11 +132,10 @@ abstract class StampAndroidIconsTask : DefaultTask() {
             return
         }
 
-        val workRoot = File(output.parentFile, "stamp-work").also {
-            it.deleteRecursively(); it.mkdirs()
-        }
-
-        val cli = extractCli(output.parentFile)
+        // Use Gradle's managed temporaryDir for scratch space — it is excluded from output
+        // snapshotting, not a sibling of the @OutputDirectory, and cleaned by ./gradlew clean.
+        val workRoot = File(temporaryDir, "stamp-work").apply { mkdirs() }
+        val cli = extractCli(temporaryDir)
         val color = bannerColor.get()
         val label = bannerLabel.get()
         val base = iconName.get()
@@ -240,9 +239,14 @@ abstract class StampAndroidIconsTask : DefaultTask() {
         }
 
         // Detect which ImageMagick binary is available — same logic as the bundled CLI.
+        // Use runCatching to handle IOException when the binary is not on PATH (start() throws,
+        // it does not return a non-zero exit code).
         val im = listOf("magick", "convert").firstOrNull { bin ->
-            ProcessBuilder(bin, "-version").redirectErrorStream(true)
-                .start().let { it.inputStream.bufferedReader().readText(); it.waitFor() } == 0
+            runCatching {
+                ProcessBuilder(bin, "-version").redirectErrorStream(true).start()
+                    .also { it.inputStream.use { s -> s.readBytes() } }
+                    .waitFor() == 0
+            }.getOrDefault(false)
         } ?: run {
             logger.warn("app-icon-banner: ImageMagick not found; adaptive-icon overlay not generated.")
             return
@@ -306,17 +310,23 @@ abstract class StampAndroidIconsTask : DefaultTask() {
             val outAnydpiDir = File(output, anydpiDir.name).apply { mkdirs() }
             xmlFiles.forEach { xmlFile ->
                 val original = xmlFile.readText()
-                val backgroundRef = Regex("""android:drawable="(@[^"]+)"""")
-                    .findAll(original)
-                    .map { it.groupValues[1] }
-                    .firstOrNull { "background" in it }
+                val allRefs = Regex("""android:drawable="(@[^"]+)"""")
+                    .findAll(original).map { it.groupValues[1] }.toList()
+                val backgroundRef = allRefs.firstOrNull { "background" in it }
                     ?: "@drawable/${base}_background"
+
+                // Preserve <monochrome> if present — Android 13+ themed icons use it.
+                // Dropping it would silently break Material You icon theming for the stamped variant.
+                val monochromeRef = allRefs.firstOrNull { "monochrome" in it }
+                val monochromeElement = monochromeRef
+                    ?.let { "\n    <monochrome android:drawable=\"$it\"/>" }
+                    ?: ""
 
                 File(outAnydpiDir, xmlFile.name).writeText(
                     """<?xml version="1.0" encoding="utf-8"?>
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <background android:drawable="$backgroundRef"/>
-    <foreground android:drawable="@drawable/$foregroundLayerName"/>
+    <foreground android:drawable="@drawable/$foregroundLayerName"/>$monochromeElement
 </adaptive-icon>
 """,
                 )
@@ -366,8 +376,11 @@ abstract class StampAndroidIconsTask : DefaultTask() {
      * This is authoritative — avoids guessing drawable names or locations.
      */
     private fun detectXmlVectorForeground(source: File, anydpiDirs: List<File>): File? {
+        val base = iconName.get()
+        // Filter to XMLs whose name starts with `base` — same set that generateXmlForegroundOverlay
+        // iterates — so detection and generation operate on the same file, not a random sibling.
         val adaptiveIconXml = anydpiDirs
-            .flatMap { it.listFiles()?.filter { f -> f.extension == "xml" } ?: emptyList() }
+            .flatMap { it.listFiles()?.filter { f -> f.extension == "xml" && f.nameWithoutExtension.startsWith(base) } ?: emptyList() }
             .firstOrNull() ?: return null
 
         val xml = adaptiveIconXml.readText()
@@ -387,8 +400,8 @@ abstract class StampAndroidIconsTask : DefaultTask() {
             f.extension in STAMPABLE_EXTENSIONS && f.nameWithoutExtension in baseNames
         } ?: emptyList()
 
-    private fun extractCli(parentDir: File): File {
-        val cli = File(parentDir, "app-icon-banner")
+    private fun extractCli(dir: File): File {
+        val cli = File(dir, "app-icon-banner")
         javaClass.getResourceAsStream("/app-icon-banner")
             ?.use { input -> cli.outputStream().use { input.copyTo(it) } }
             ?: error("Bundled CLI resource missing from the plugin jar")
