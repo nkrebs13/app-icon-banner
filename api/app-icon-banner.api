@@ -4,8 +4,12 @@ public class io/github/nkrebs13/appiconbanner/AppIconBannerExtension {
 	public fun <init> ()V
 	public final fun buildType (Ljava/lang/String;Lorg/gradle/api/Action;)V
 	public final fun flavor (Ljava/lang/String;Lorg/gradle/api/Action;)V
+	public final fun getAndroidIconName ()Ljava/lang/String;
+	public final fun getAndroidResDir ()Ljava/lang/String;
 	public final fun getDebugDefault ()Z
 	public final fun iosConfiguration (Ljava/lang/String;Lorg/gradle/api/Action;)V
+	public final fun setAndroidIconName (Ljava/lang/String;)V
+	public final fun setAndroidResDir (Ljava/lang/String;)V
 	public final fun setDebugDefault (Z)V
 	public final fun variant (Ljava/lang/String;Lorg/gradle/api/Action;)V
 }
@@ -23,6 +27,11 @@ public final class io/github/nkrebs13/appiconbanner/AppIconBannerPlugin : org/gr
 }
 
 public final class io/github/nkrebs13/appiconbanner/AppIconBannerPlugin$Companion {
+}
+
+public final class io/github/nkrebs13/appiconbanner/AppIconBannerPlugin$inlined$sam$i$org_gradle_api_Action$0 : org/gradle/api/Action {
+	public fun <init> (Lkotlin/jvm/functions/Function1;)V
+	public final synthetic fun execute (Ljava/lang/Object;)V
 }
 
 public final class io/github/nkrebs13/appiconbanner/BannerConfig {
@@ -44,6 +53,16 @@ public final class io/github/nkrebs13/appiconbanner/BannerSpec {
 	public final fun getLabel ()Ljava/lang/String;
 	public final fun setColor (Ljava/lang/String;)V
 	public final fun setLabel (Ljava/lang/String;)V
+}
+
+public abstract class io/github/nkrebs13/appiconbanner/android/StampAndroidIconsTask : org/gradle/api/DefaultTask {
+	public fun <init> ()V
+	public abstract fun getBannerColor ()Lorg/gradle/api/provider/Property;
+	public abstract fun getBannerLabel ()Lorg/gradle/api/provider/Property;
+	public abstract fun getIconName ()Lorg/gradle/api/provider/Property;
+	public abstract fun getOutputDir ()Lorg/gradle/api/file/DirectoryProperty;
+	public abstract fun getSourceResDir ()Lorg/gradle/api/file/DirectoryProperty;
+	public final fun stamp ()V
 }
 
 public abstract class io/github/nkrebs13/appiconbanner/ios/ExportIosBannerConfigTask : org/gradle/api/DefaultTask {

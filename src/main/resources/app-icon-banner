@@ -1,24 +1,35 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# app-icon-banner — stamp a color+label banner onto iOS app icons per Xcode configuration.
+# app-icon-banner — stamp a color+label banner onto app icons.
 #
-# Installed by the AppIconBanner Gradle plugin (io.github.nkrebs13.app-icon-banner). Safe to commit.
-# Invoke from an Xcode "Run Script" build phase placed BEFORE "Copy Bundle Resources":
+# Installed by the AppIconBanner Gradle plugin (io.github.nkrebs13.app-icon-banner).
+#
+# iOS — invoke from an Xcode "Run Script" phase placed BEFORE "Copy Bundle Resources":
 #
 #   "${SRCROOT}/scripts/app-icon-banner" \
 #       --config "$CONFIGURATION" \
 #       --appiconset "$SRCROOT/<App>/Assets.xcassets/AppIcon.appiconset"
 #
-# Idempotent: the output appiconset is regenerated from a pristine "<name>-base.appiconset" on every
-# run, so re-running never double-stamps. Commit the *-base.appiconset; gitignore the output set.
+#   Idempotent: the output appiconset is regenerated from a "<name>-base.appiconset" on every
+#   run, so re-running never double-stamps. Commit *-base.appiconset; gitignore the output set.
+#
+# Android — invoked by the Gradle plugin via --no-base mode with direct color/label overrides:
+#
+#   app-icon-banner --appiconset <dir> --no-base --color "#0288D1" --label "DEBUG"
+#
+#   The Gradle task copies clean source icons into a generated build directory and calls
+#   this script to stamp them in place. No base set management needed.
 
 CONFIG=""
 APPICONSET=""
 BASE=""
 CONFIG_FILE=""
 FONT=""
-HEIGHT_PCT=18           # band height as % of icon height (smaller than v1's 22 to leave clearance)
+COLOR_OVERRIDE=""
+LABEL_OVERRIDE=""
+NO_BASE=false
+HEIGHT_PCT=18           # band height as % of icon height
 BOTTOM_INSET_PCT=8      # band bottom edge sits this % above icon bottom (clears iOS squircle)
 TEXT_PCT=55             # text point size as % of band height
 
@@ -29,68 +40,97 @@ while [[ $# -gt 0 ]]; do
     --base)              BASE="${2:-}"; shift 2 ;;
     --config-file)       CONFIG_FILE="${2:-}"; shift 2 ;;
     --font)              FONT="${2:-}"; shift 2 ;;
+    --color)             COLOR_OVERRIDE="${2:-}"; shift 2 ;;
+    --label)             LABEL_OVERRIDE="${2:-}"; shift 2 ;;
+    --no-base)           NO_BASE=true; shift ;;
     --height-pct)        HEIGHT_PCT="${2:-}"; shift 2 ;;
     --bottom-inset-pct)  BOTTOM_INSET_PCT="${2:-}"; shift 2 ;;
     --text-pct)          TEXT_PCT="${2:-}"; shift 2 ;;
-    -h|--help)           sed -n '3,18p' "$0"; exit 0 ;;
+    -h|--help)           sed -n '3,22p' "$0"; exit 0 ;;
     *) echo "app-icon-banner: unknown argument: $1" >&2; exit 2 ;;
   esac
 done
 
-[[ -n "$CONFIG" ]]     || { echo "app-icon-banner: --config is required" >&2; exit 2; }
 [[ -n "$APPICONSET" ]] || { echo "app-icon-banner: --appiconset is required" >&2; exit 2; }
 
-# Default config file: next to SRCROOT, else current directory.
-if [[ -z "$CONFIG_FILE" ]]; then
-  if [[ -n "${SRCROOT:-}" && -f "$SRCROOT/app-icon-banner.config" ]]; then
-    CONFIG_FILE="$SRCROOT/app-icon-banner.config"
-  else
-    CONFIG_FILE="app-icon-banner.config"
+if [[ "$NO_BASE" == "true" ]]; then
+  # Android mode: direct color/label required; no config file, no base set management.
+  [[ -n "$COLOR_OVERRIDE" ]] || { echo "app-icon-banner: --no-base requires --color" >&2; exit 2; }
+  [[ -n "$LABEL_OVERRIDE" ]] || { echo "app-icon-banner: --no-base requires --label" >&2; exit 2; }
+else
+  # iOS mode: --config required to look up the active Xcode configuration.
+  [[ -n "$CONFIG" ]] || { echo "app-icon-banner: --config is required" >&2; exit 2; }
+fi
+
+# --- Color / label resolution ---
+
+COLOR=""
+LABEL=""
+
+if [[ -n "$COLOR_OVERRIDE" ]]; then
+  # Direct override (Android mode): skip config file entirely.
+  COLOR="$COLOR_OVERRIDE"
+  LABEL="$LABEL_OVERRIDE"
+else
+  # iOS mode: look up config name in the config file.
+  if [[ -z "$CONFIG_FILE" ]]; then
+    if [[ -n "${SRCROOT:-}" && -f "$SRCROOT/app-icon-banner.config" ]]; then
+      CONFIG_FILE="$SRCROOT/app-icon-banner.config"
+    else
+      CONFIG_FILE="app-icon-banner.config"
+    fi
+  fi
+
+  lc() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+
+  if [[ -f "$CONFIG_FILE" ]]; then
+    while IFS='|' read -r name color label || [[ -n "$name" ]]; do
+      [[ -z "${name// }" ]] && continue
+      if [[ "$(lc "$name")" == "$(lc "$CONFIG")" ]]; then
+        COLOR="$color"
+        LABEL="$label"
+        break
+      fi
+    done < "$CONFIG_FILE"
   fi
 fi
 
-# Default base set: sibling "<name>-base.appiconset".
-[[ -n "$BASE" ]] || BASE="${APPICONSET%.appiconset}-base.appiconset"
-
-lc() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
-
-# Look up color|label for this configuration (case-insensitive on the config name).
-COLOR=""
-LABEL=""
-if [[ -f "$CONFIG_FILE" ]]; then
-  while IFS='|' read -r name color label || [[ -n "$name" ]]; do
-    [[ -z "${name// }" ]] && continue
-    if [[ "$(lc "$name")" == "$(lc "$CONFIG")" ]]; then
-      COLOR="$color"
-      LABEL="$label"
-      break
-    fi
-  done < "$CONFIG_FILE"
-fi
-
-# Validate COLOR before handing to ImageMagick. Catches corrupt or manually-edited config lines
-# early with a clear message instead of a cryptic ImageMagick error.
+# Validate COLOR before handing to ImageMagick (catches corrupt/manual config edits).
 if [[ -n "$COLOR" ]] && ! [[ "$COLOR" =~ ^#[0-9A-Fa-f]{6}$ ]]; then
-  echo "app-icon-banner: invalid color '$COLOR' for '$CONFIG' in config file — expected #RRGGBB" >&2
+  echo "app-icon-banner: invalid color '$COLOR' — expected #RRGGBB" >&2
   exit 2
 fi
 
-# Regenerate the output set from the pristine base (idempotency). First run with no base treats the
-# current set as pristine and snapshots it.
-if [[ -d "$BASE" ]]; then
-  rm -rf "$APPICONSET"
-  cp -R "$BASE" "$APPICONSET"
-elif [[ -d "$APPICONSET" ]]; then
-  cp -R "$APPICONSET" "$BASE"
+# --- Base-set idempotency (iOS only) ---
+
+if [[ "$NO_BASE" == "true" ]]; then
+  # Android mode: the Gradle task already populated $APPICONSET with clean copies.
+  # Just verify the directory exists.
+  if ! [[ -d "$APPICONSET" ]]; then
+    echo "app-icon-banner: directory not found: $APPICONSET" >&2
+    exit 1
+  fi
 else
-  echo "app-icon-banner: appiconset not found: $APPICONSET" >&2
-  exit 1
+  # iOS mode: regenerate the output set from the pristine base on every run.
+  # First run (no base yet) treats the current set as pristine and snapshots it.
+  [[ -n "$BASE" ]] || BASE="${APPICONSET%.appiconset}-base.appiconset"
+  if [[ -d "$BASE" ]]; then
+    rm -rf "$APPICONSET"
+    cp -R "$BASE" "$APPICONSET"
+  elif [[ -d "$APPICONSET" ]]; then
+    cp -R "$APPICONSET" "$BASE"
+  else
+    echo "app-icon-banner: appiconset not found: $APPICONSET" >&2
+    exit 1
+  fi
+
+  if [[ -z "$COLOR" ]]; then
+    echo "app-icon-banner: no banner for configuration '$CONFIG' — left pristine."
+    exit 0
+  fi
 fi
 
-if [[ -z "$COLOR" ]]; then
-  echo "app-icon-banner: no banner for configuration '$CONFIG' — left pristine."
-  exit 0
-fi
+# --- ImageMagick setup ---
 
 if command -v magick >/dev/null 2>&1; then
   IM=(magick)
@@ -125,28 +165,40 @@ if [[ -z "$FONT" || ! -f "$FONT" ]]; then
   exit 1
 fi
 
+# --- Stamp ---
+
 shopt -s nullglob
 count=0
-for icon in "$APPICONSET"/*.png; do
+
+# Process both PNG and WebP. WebP is standard on modern Android; PNG on iOS appiconsets.
+for icon in "$APPICONSET"/*.png "$APPICONSET"/*.webp; do
+  [[ -f "$icon" ]] || continue
+
   read -r W H < <("${IM[@]}" identify -format '%w %h\n' "$icon")
   band=$(( H * HEIGHT_PCT / 100 ))
   [[ "$band" -lt 1 ]] && band=1
   inset=$(( H * BOTTOM_INSET_PCT / 100 ))
   fontsize=$(( band * TEXT_PCT / 100 ))
   [[ "$fontsize" -lt 6 ]] && fontsize=6
-  # -colorspace sRGB -type TrueColor on the base guards against grayscale source icons (a
-  # grayscale base would collapse the colored band to gray during compositing). -strip removes
-  # metadata so repeated runs are byte-for-byte identical (idempotency).
-  # The +0+$inset geometry lifts the band off the bottom edge — critical on iOS where the
-  # squircle mask clips the bottom-corner region. Default 8% inset keeps the band fully inside
-  # the visible squircle so no letter descenders are clipped.
+
+  # -colorspace sRGB -type TrueColor: guards against grayscale source icons (a grayscale base
+  # would collapse the colored band to gray during compositing). Works for both PNG and WebP.
+  # -strip: removes metadata so repeated runs are byte-for-byte identical (idempotency).
+  # +0+$inset: lifts the band off the bottom edge — clears the iOS squircle mask curve and the
+  # Android adaptive icon safe-zone boundary (caller sets BOTTOM_INSET_PCT accordingly).
   "${IM[@]}" "$icon" -colorspace sRGB -type TrueColor \
     \( -size "${W}x${band}" "xc:${COLOR}" \
        -font "$FONT" -fill white -gravity center -pointsize "$fontsize" -annotate 0 "$LABEL" \) \
-    -gravity south -geometry "+0+$inset" -composite \
+    -gravity south -geometry "+0+${inset}" -composite \
+    -define webp:lossless=true \
     -strip \
     "$icon"
+
   count=$(( count + 1 ))
 done
 
-echo "app-icon-banner: stamped '$LABEL' (${COLOR}) on ${count} icon(s) in $(basename "$APPICONSET") for '$CONFIG'."
+if [[ -n "$CONFIG" ]]; then
+  echo "app-icon-banner: stamped '$LABEL' (${COLOR}) on ${count} icon(s) in $(basename "$APPICONSET") for '$CONFIG'."
+else
+  echo "app-icon-banner: stamped '$LABEL' (${COLOR}) on ${count} icon(s) in $(basename "$APPICONSET")."
+fi

@@ -12,15 +12,17 @@
 
 </div>
 
-A Gradle plugin for **Kotlin Multiplatform** projects that stamps a color + label banner onto app icons per build variant. A single `appIconBanner { }` block in your Android module drives banner rendering for both Android (wraps [easylauncher](https://github.com/usefulness/easylauncher-gradle-plugin)) and iOS (exports a CLI for your Xcode Run Script).
+A Gradle plugin for **Kotlin Multiplatform** projects that stamps a color + label banner onto app icons per build variant. A single `appIconBanner { }` block drives banner rendering for both Android and iOS using the same **ImageMagick** renderer — identical output on both platforms.
 
 ## Requirements
 
-Gradle 8.4+, Android Gradle Plugin 8.4+, JDK 17. iOS stamping additionally requires a Freetype-enabled [ImageMagick](https://imagemagick.org) on the build machine:
+Gradle 8.4+, Android Gradle Plugin 8.4+, JDK 17. Both Android and iOS stamping require a Freetype-enabled [ImageMagick](https://imagemagick.org) on the build machine:
 
 ```bash
 brew install imagemagick
 ```
+
+Since this plugin is designed for KMP projects (which always have an iOS target), ImageMagick is a single prerequisite that covers both platforms.
 
 ## Install
 
@@ -34,7 +36,7 @@ plugins {
 }
 ```
 
-That's it for Android. Debug builds immediately get a blue **DEBUG** banner — no configuration required.
+That's it for Android. Debug builds immediately get a blue **DEBUG** banner — no extra configuration required. The plugin stamps all launcher icon densities (`mipmap-*`) including the adaptive icon foreground layer, using ImageMagick with the correct safe-zone geometry for each type.
 
 ## Configuration
 
@@ -58,7 +60,7 @@ appIconBanner {
 **Resolution priority** (most specific wins, never stacked): `variant` > `flavor` > `buildType` > built-in debug default.
 
 - `color` must be `#RRGGBB`. Defaults to `#0288D1` (blue) when omitted.
-- `label` defaults to the slot name when omitted.
+- `label` must not contain `|` (config-file field separator) or `%` (ImageMagick format specifier). Defaults to the slot name when omitted.
 - Set `debugDefault = false` to opt out of the automatic debug banner.
 
 ### Three-tier recipe
@@ -158,6 +160,8 @@ The defaults are sized for the iOS squircle mask — the band is inset so no des
 **`no usable font found`** — Pass a font path explicitly with `--font /path/to/Font.ttf`. On Linux CI use a DejaVu or similar system font.
 
 **`appIconBanner: invalid color '...'`** — Gradle build error. Use `#RRGGBB` format (six hex digits), e.g. `#FF6F00`.
+
+**`appIconBanner: label '...' must not contain '%'`** — ImageMagick interprets `%`-prefixed sequences in annotation text (e.g. `%w`, `%[fx:...]`). Choose a label without `%`.
 
 **`NoMatchingVariantSelectionException`** — Add `matchingFallbacks` to each library module for any custom build type. See the three-tier recipe above.
 

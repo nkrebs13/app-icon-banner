@@ -15,7 +15,6 @@ java {
 
 dependencies {
     compileOnly(libs.agp.api)
-    implementation(libs.easylauncher)
 
     testImplementation(libs.junit.jupiter)
     testImplementation(gradleTestKit())
@@ -34,7 +33,7 @@ gradlePlugin {
             displayName = "App Icon Banner"
             description =
                 "Stamp a color + label banner onto Android and iOS app icons per build variant / " +
-                "Xcode configuration. Wraps easylauncher on Android; ships a CLI for iOS."
+                "Xcode configuration. Uses ImageMagick on both platforms for visual consistency."
             tags = listOf("android", "ios", "kmp", "launcher", "icon", "banner", "variant")
             implementationClass = "io.github.nkrebs13.appiconbanner.AppIconBannerPlugin"
         }
@@ -44,7 +43,7 @@ gradlePlugin {
 apiValidation {
     // The Kotlin DSL `register<T>` inline function generates a synthetic SAM adapter for the
     // task configuration Action — an implementation detail, not a public API surface.
-    ignoredClasses.add("io.github.nkrebs13.appiconbanner.AppIconBannerPlugin\$inlined\$sam\$i\$org_gradle_api_Action\$0")
+    ignoredClasses.add("io.github.nkrebs13.appiconbanner.AppIconBannerPlugin\$apply\$1\$inlined\$sam\$i\$org_gradle_api_Action\$0")
 }
 
 // Scope the exclusion only to the default `test` task. Using `withType<Test>().configureEach`
