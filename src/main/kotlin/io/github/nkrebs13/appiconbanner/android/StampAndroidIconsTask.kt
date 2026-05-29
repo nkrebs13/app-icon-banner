@@ -184,6 +184,29 @@ abstract class StampAndroidIconsTask : DefaultTask() {
                     .forEach { it.copyTo(File(outMipmapDir, it.name), overwrite = true) }
             }
 
+            // Raster foreground in drawable/ (density-independent WebP/PNG). Some projects store
+            // the adaptive icon foreground directly in drawable/ rather than per-density mipmap
+            // dirs. Stamp it and output to drawable/ in the generated res so AGP merges it with
+            // highest priority over the original.
+            if (!hasRasterForeground) {
+                val drawableDir = File(source, "drawable")
+                val drawableForeground = findIcons(drawableDir, adaptiveNames)
+                if (drawableForeground.isNotEmpty()) {
+                    hasRasterForeground = true
+                    val outDrawableDir = File(output, "drawable").apply { mkdirs() }
+                    totalStamped += stampIcons(
+                        cli = cli,
+                        workDir = File(workRoot, "drawable-adaptive").also { it.mkdirs() },
+                        sources = drawableForeground,
+                        outputDir = outDrawableDir,
+                        color = color, label = label,
+                        heightPct = ADAPTIVE_HEIGHT_PCT,
+                        bottomInsetPct = ADAPTIVE_BOTTOM_INSET_PCT,
+                        textPct = ADAPTIVE_TEXT_PCT,
+                    )
+                }
+            }
+
             // If there are no raster foreground images across any density bucket, check whether
             // the adaptive icon XML references an XML vector foreground. Reading from the adaptive
             // icon XML directly is authoritative — avoids guessing the drawable name/location.
