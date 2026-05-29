@@ -70,7 +70,7 @@ fi
 
 # Validate COLOR before handing to ImageMagick. Catches corrupt or manually-edited config lines
 # early with a clear message instead of a cryptic ImageMagick error.
-if [[ -n "$COLOR" ]] && ! [[ "$COLOR" =~ ^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$ ]]; then
+if [[ -n "$COLOR" ]] && ! [[ "$COLOR" =~ ^#[0-9A-Fa-f]{6}$ ]]; then
   echo "app-icon-banner: invalid color '$COLOR' for '$CONFIG' in config file — expected #RRGGBB" >&2
   exit 2
 fi

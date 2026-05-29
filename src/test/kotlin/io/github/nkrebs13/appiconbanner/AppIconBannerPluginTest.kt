@@ -13,19 +13,13 @@ import java.io.File
 class AppIconBannerPluginTest {
 
     @Test
-    fun `applies extension and registers the iOS export task`() {
+    fun `plugin applied to a non-Android project registers extension and iOS task only`() {
+        // Covers iOS-only and plain Kotlin projects (no AGP). Verifies the extension is registered
+        // and no easylauncher wiring fires without an Android plugin present.
         val project = ProjectBuilder.builder().build()
         project.pluginManager.apply("io.github.nkrebs13.app-icon-banner")
 
         assertNotNull(project.extensions.findByName("appIconBanner"))
-        assertNotNull(project.tasks.findByName("exportIosBannerConfig"))
-    }
-
-    @Test
-    fun `plugin applied to a non-Android project registers only the iOS task`() {
-        // iOS-only or plain Kotlin project — no AGP present.
-        val project = ProjectBuilder.builder().build()
-        project.pluginManager.apply("io.github.nkrebs13.app-icon-banner")
         assertNotNull(project.tasks.findByName("exportIosBannerConfig"))
         assertNull(project.extensions.findByName("easylauncher"))
         assertTrue(project.tasks.names.none { it.contains("easylauncher", ignoreCase = true) })

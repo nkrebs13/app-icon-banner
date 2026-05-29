@@ -100,8 +100,9 @@ class AppIconBannerExtensionTest {
         val ex = assertThrows<IllegalArgumentException> {
             ext.resolveAndroid("phoneDebug", listOf("phone"), "debug")
         }
-        assertTrue(ex.message!!.contains("notacolor"))
-        assertTrue(ex.message!!.contains("appIconBanner"))
+        val msg = ex.message!!
+        assertTrue(msg.contains("notacolor") && msg.contains("appIconBanner"),
+            "expected 'notacolor' and 'appIconBanner' in: $msg")
     }
 
     @Test
@@ -110,8 +111,9 @@ class AppIconBannerExtensionTest {
         val ex = assertThrows<IllegalArgumentException> {
             ext.resolveAndroid("phoneDebug", listOf("phone"), "debug")
         }
-        assertTrue(ex.message!!.contains("|"))
-        assertTrue(ex.message!!.contains("appIconBanner"))
+        val msg = ex.message!!
+        assertTrue(msg.contains("|") && msg.contains("appIconBanner"),
+            "expected '|' and 'appIconBanner' in: $msg")
     }
 
     @Test

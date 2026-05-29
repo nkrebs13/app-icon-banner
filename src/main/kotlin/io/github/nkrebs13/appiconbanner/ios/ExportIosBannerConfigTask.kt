@@ -30,9 +30,11 @@ abstract class ExportIosBannerConfigTask : DefaultTask() {
 
     @TaskAction
     fun export() {
+        val lines = configLines.get()
+
         val configFile = outputConfig.get().asFile
         configFile.parentFile?.mkdirs()
-        configFile.writeText(configLines.get().joinToString(separator = "\n", postfix = "\n"))
+        configFile.writeText(lines.joinToString(separator = "\n", postfix = "\n"))
 
         val cliFile = outputCli.get().asFile
         cliFile.parentFile?.mkdirs()
@@ -42,7 +44,7 @@ abstract class ExportIosBannerConfigTask : DefaultTask() {
         cliFile.setExecutable(true, false)
 
         logger.lifecycle(
-            "app-icon-banner: wrote ${configLines.get().size} config line(s) to " +
+            "app-icon-banner: wrote ${lines.size} config line(s) to " +
                 "${configFile.name} and installed CLI at ${cliFile.path}",
         )
     }
