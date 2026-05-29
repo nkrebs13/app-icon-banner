@@ -5,3 +5,7 @@ build/
 local.properties
 *.iml
 out/
+
+# Claude Code internal tooling — local only
+CLAUDE.md
+.claude/
