@@ -141,4 +141,26 @@ class AppIconBannerExtensionTest {
         assertTrue(msg.contains("%") && msg.contains("appIconBanner"),
             "expected '%' and 'appIconBanner' in: $msg")
     }
+
+    @Test
+    fun `label starting with at-sign throws with a clear message`() {
+        val ext = extension { buildType("debug") { label = "@/etc/passwd" } }
+        val ex = assertThrows<IllegalArgumentException> {
+            ext.resolveAndroid("phoneDebug", listOf("phone"), "debug")
+        }
+        val msg = ex.message!!
+        assertTrue(msg.contains("@") && msg.contains("appIconBanner"),
+            "expected '@' and 'appIconBanner' in: $msg")
+    }
+
+    @Test
+    fun `label with newline throws with a clear message`() {
+        val ext = extension { buildType("debug") { label = "DEBUG\nINJECTED" } }
+        val ex = assertThrows<IllegalArgumentException> {
+            ext.resolveAndroid("phoneDebug", listOf("phone"), "debug")
+        }
+        val msg = ex.message!!
+        assertTrue(msg.contains("newline") && msg.contains("appIconBanner"),
+            "expected 'newline' and 'appIconBanner' in: $msg")
+    }
 }

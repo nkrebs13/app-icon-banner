@@ -41,7 +41,7 @@ Commit the updated `api/app-icon-banner.api`. The `apiCheck` task (part of `./gr
 
 ## Publishing
 
-See [Publishing](README.md#publishing-maintainers) in the README. Plugin Portal credentials are required and are not part of this repository.
+Plugin Portal credentials go in `~/.gradle/gradle.properties` (`gradle.publish.key` / `gradle.publish.secret`). See `CLAUDE.md` for details. Credentials are not part of this repository.
 
 ## PR checklist
 

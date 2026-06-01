@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Added
+- `iosOutputDir` extension property — redirect iOS outputs (`app-icon-banner.config` + `scripts/app-icon-banner`) to any directory relative to the module root. KMP projects can now set `iosOutputDir = "../iosApp"` instead of importing the internal `ExportIosBannerConfigTask` class.
+- Linux font auto-detection for Android icon stamping. DejaVu, Liberation, FreeSans, and Ubuntu fonts are now probed automatically on Linux, enabling `assembleDebug` on GitHub Actions `ubuntu-latest` without manual `--font` configuration.
+
+### Changed
+- `exportIosBannerConfig` output paths now use `convention()` instead of `set()`, so task-level overrides via `tasks.named<ExportIosBannerConfigTask>` still take precedence for unusual project layouts.
+- `StampAndroidIconsTask` resolves the font path before invoking the bundled CLI and passes it explicitly via `--font`, ensuring consistent font resolution behavior across macOS and Linux.
+- README restructured: the full iOS setup walkthrough moved to `docs/ios-setup.md`; the complete DSL reference moved to `docs/configuration.md`. The README is now a glanceable entry point.
+
+### Fixed
+- Android banner stamping on Linux CI would fail silently (no font found) because the font candidate list was macOS-only. Both the Kotlin task and the bundled bash CLI now include Linux font paths.
+
 ## [0.1.0] — 2026-05-28
 
 ### Added

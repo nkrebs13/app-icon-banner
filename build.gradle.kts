@@ -32,8 +32,9 @@ gradlePlugin {
             id = "io.github.nkrebs13.app-icon-banner"
             displayName = "App Icon Banner"
             description =
-                "Stamp a color + label banner onto Android and iOS app icons per build variant / " +
-                "Xcode configuration. Uses ImageMagick on both platforms for visual consistency."
+                "Kotlin Multiplatform (KMP) Gradle plugin — stamp a color + label banner onto " +
+                "Android and iOS app icons per build variant / Xcode configuration from a single " +
+                "appIconBanner { } DSL. Uses ImageMagick on both platforms for identical output."
             tags = listOf("android", "ios", "kmp", "launcher", "icon", "banner", "variant")
             implementationClass = "io.github.nkrebs13.appiconbanner.AppIconBannerPlugin"
         }
