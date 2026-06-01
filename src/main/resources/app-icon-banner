@@ -150,6 +150,8 @@ fi
 
 # Resolve a font file. Fontconfig is often absent on macOS ImageMagick builds, so we pass an
 # explicit TTF/TTC path rather than a font name. Override with --font.
+# NOTE: When invoked by the Gradle plugin (Android builds), --font is always supplied by
+# StampAndroidIconsTask, so this probe runs only for direct CLI invocations (iOS Xcode phase).
 if [[ -z "$FONT" ]]; then
   for candidate in \
     /System/Library/Fonts/Helvetica.ttc \

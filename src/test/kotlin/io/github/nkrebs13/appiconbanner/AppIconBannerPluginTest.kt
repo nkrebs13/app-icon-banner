@@ -18,6 +18,16 @@ import java.io.File
 // that debug variants show the banner and release variants do not.
 class AppIconBannerPluginTest {
 
+    private fun buildExportProject(
+        tempDir: File,
+        configure: AppIconBannerExtension.() -> Unit,
+    ): ExportIosBannerConfigTask {
+        val project = ProjectBuilder.builder().withProjectDir(tempDir).build()
+        project.pluginManager.apply("io.github.nkrebs13.app-icon-banner")
+        project.extensions.getByType(AppIconBannerExtension::class.java).configure()
+        return project.tasks.getByName("exportIosBannerConfig") as ExportIosBannerConfigTask
+    }
+
     @Test
     fun `plugin applied to a non-Android project registers extension and iOS task only`() {
         // Covers iOS-only and plain Kotlin projects (no AGP). Without an Android plugin the
@@ -45,14 +55,10 @@ class AppIconBannerPluginTest {
 
     @Test
     fun `iosOutputDir redirects config and CLI to the specified directory`(@TempDir tempDir: File) {
-        val project = ProjectBuilder.builder().withProjectDir(tempDir).build()
-        project.pluginManager.apply("io.github.nkrebs13.app-icon-banner")
-
-        val ext = project.extensions.getByType(AppIconBannerExtension::class.java)
-        ext.iosOutputDir = "iosApp"
-        ext.buildType("debug") { color = "#0288D1"; label = "DEBUG" }
-
-        val task = project.tasks.getByName("exportIosBannerConfig") as ExportIosBannerConfigTask
+        val task = buildExportProject(tempDir) {
+            iosOutputDir = "iosApp"
+            buildType("debug") { color = "#0288D1"; label = "DEBUG" }
+        }
         task.export()
 
         assertTrue(File(tempDir, "iosApp/app-icon-banner.config").exists(), "config should be in iosApp/")
@@ -73,14 +79,10 @@ class AppIconBannerPluginTest {
 
     @Test
     fun `export task writes the config file and installs the CLI`(@TempDir tempDir: File) {
-        val project = ProjectBuilder.builder().withProjectDir(tempDir).build()
-        project.pluginManager.apply("io.github.nkrebs13.app-icon-banner")
-
-        val extension = project.extensions.getByType(AppIconBannerExtension::class.java)
-        extension.buildType("debug") { color = "#0288D1"; label = "DEBUG" }
-        extension.iosConfiguration("Firebase") { color = "#FF6F00"; label = "FIREBASE" }
-
-        val task = project.tasks.getByName("exportIosBannerConfig") as ExportIosBannerConfigTask
+        val task = buildExportProject(tempDir) {
+            buildType("debug") { color = "#0288D1"; label = "DEBUG" }
+            iosConfiguration("Firebase") { color = "#FF6F00"; label = "FIREBASE" }
+        }
         task.export()
 
         val configFile = File(tempDir, "app-icon-banner.config")
