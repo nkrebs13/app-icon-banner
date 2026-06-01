@@ -1,11 +1,29 @@
 package io.github.nkrebs13.appiconbanner
 
 import org.gradle.api.Action
+import java.io.File
 
 // #RRGGBB only — the format ImageMagick accepts unambiguously for both xc: color specs and
 // -fill values. 4-digit #ARGB and 8-digit #AARRGGBB are rejected here to surface the error at
 // DSL configuration time rather than at ImageMagick invocation.
 private val COLOR_REGEX = Regex("^#[0-9A-Fa-f]{6}$")
+private const val MAX_LABEL_LENGTH = 100
+
+/**
+ * Validates a user-supplied [androidResDir] value. Extracted so it can be unit-tested without
+ * a full Gradle project wiring (the call site is inside an `onVariants` callback which does not
+ * fire under `ProjectBuilder`).
+ */
+internal fun validateAndroidResDir(dir: String) {
+    require(!File(dir).isAbsolute) {
+        "appIconBanner.androidResDir must be a relative path (got: '$dir'). " +
+            "Use a path relative to the module root (e.g. 'src/androidMain/res')."
+    }
+    require(!dir.contains("..")) {
+        "appIconBanner.androidResDir must not contain '..': '$dir'. " +
+            "Use a path relative to the module root (e.g. 'src/androidMain/res')."
+    }
+}
 
 /**
  * Mutable holder configured inside a `buildType { }` / `flavor { }` / `variant { }` /
@@ -37,6 +55,9 @@ class BannerSpec {
         }
         require('\n' !in resolvedLabel && '\r' !in resolvedLabel) {
             "appIconBanner: label '$resolvedLabel' must not contain newline characters"
+        }
+        require(resolvedLabel.length <= MAX_LABEL_LENGTH) {
+            "appIconBanner: label is too long (${resolvedLabel.length} chars); max is $MAX_LABEL_LENGTH"
         }
         return BannerConfig(color = resolvedColor, label = resolvedLabel)
     }

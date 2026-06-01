@@ -1,13 +1,12 @@
 package io.github.nkrebs13.appiconbanner.ios
 
+import io.github.nkrebs13.appiconbanner.CLI_RESOURCE
 import org.gradle.api.DefaultTask
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.provider.ListProperty
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.TaskAction
-
-private const val CLI_RESOURCE = "/app-icon-banner"
 
 /**
  * Writes `app-icon-banner.config` (one `name|color|label` line per iOS configuration) and installs
@@ -31,6 +30,12 @@ abstract class ExportIosBannerConfigTask : DefaultTask() {
     @TaskAction
     fun export() {
         val lines = configLines.get()
+        if (lines.isEmpty()) {
+            logger.warn(
+                "app-icon-banner: no banner configurations found — the exported config will be empty. " +
+                    "Set debugDefault = true (the default) or add at least one buildType/flavor/variant block.",
+            )
+        }
 
         val configFile = outputConfig.get().asFile
         configFile.parentFile?.mkdirs()

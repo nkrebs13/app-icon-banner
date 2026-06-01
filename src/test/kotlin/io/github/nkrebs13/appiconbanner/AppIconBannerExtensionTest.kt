@@ -163,4 +163,52 @@ class AppIconBannerExtensionTest {
         assertTrue(msg.contains("newline") && msg.contains("appIconBanner"),
             "expected 'newline' and 'appIconBanner' in: $msg")
     }
+
+    @Test
+    fun `flavor name used as fallback label rejects pipe character`() {
+        val ext = extension { flavor("stag|ing") {} }
+        val ex = assertThrows<IllegalArgumentException> {
+            ext.resolveAndroid("stag|ingDebug", listOf("stag|ing"), "debug")
+        }
+        val msg = ex.message!!
+        assertTrue(msg.contains("|") && msg.contains("appIconBanner"),
+            "expected '|' and 'appIconBanner' in: $msg")
+    }
+
+    @Test
+    fun `label exceeding max length throws`() {
+        val ext = extension { buildType("debug") { label = "A".repeat(101) } }
+        val ex = assertThrows<IllegalArgumentException> {
+            ext.resolveAndroid("debug", emptyList(), "debug")
+        }
+        val msg = ex.message!!
+        assertTrue(msg.contains("too long"),
+            "expected 'too long' in: $msg")
+    }
+
+    @Test
+    fun `label at exactly max length is accepted`() {
+        val ext = extension { buildType("debug") { label = "A".repeat(100) } }
+        val config = ext.resolveAndroid("debug", emptyList(), "debug")
+        assertEquals("A".repeat(100), config?.label)
+    }
+
+    @Test
+    fun `validateAndroidResDir rejects absolute path`() {
+        val ex = assertThrows<IllegalArgumentException> { validateAndroidResDir("/etc/passwd") }
+        assertTrue(ex.message!!.contains("relative") && ex.message!!.contains("appIconBanner"),
+            "expected 'relative' and 'appIconBanner' in: ${ex.message}")
+    }
+
+    @Test
+    fun `validateAndroidResDir rejects path traversal`() {
+        val ex = assertThrows<IllegalArgumentException> { validateAndroidResDir("../../etc") }
+        assertTrue(ex.message!!.contains("..") && ex.message!!.contains("appIconBanner"),
+            "expected '..' and 'appIconBanner' in: ${ex.message}")
+    }
+
+    @Test
+    fun `validateAndroidResDir accepts normal relative path`() {
+        validateAndroidResDir("src/androidMain/res")  // should not throw
+    }
 }

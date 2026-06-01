@@ -3,6 +3,18 @@
 ## [Unreleased]
 
 ### Added
+- `docs/configuration.md`: new "Android icon variants" table documenting which icon files are stamped and why monochrome icons are intentionally skipped (Material You compatibility).
+- `CONTRIBUTING.md`: testing strategy table explaining the scope and constraints of each test file, including why `onVariants` wiring cannot be tested with `ProjectBuilder`.
+- `CONTRIBUTING.md` PR checklist: reminder to keep README version number in sync with `build.gradle.kts` on each release.
+- Label length cap: labels longer than 100 characters now throw an `IllegalArgumentException` at DSL configuration time with a clear message, rather than producing nonsensical ImageMagick output.
+- `ExportIosBannerConfigTask` warns (at `lifecycle` level) when no banner configurations are found and the exported config file will be empty.
+
+### Changed
+- `CLI_RESOURCE` constant extracted to a shared `PluginConstants.kt` file — previously the classpath path `"/app-icon-banner"` was duplicated between `ExportIosBannerConfigTask` and `StampAndroidIconsTask`.
+- `hasRasterForeground` accumulator flag in `StampAndroidIconsTask.stamp()` renamed to `rasterForegroundFound` for clarity.
+- `androidResDir` now rejects paths containing `..` at configuration time, mirroring the existing absolute-path guard on `iosOutputDir`.
+
+### Added
 - `iosOutputDir` extension property — redirect iOS outputs (`app-icon-banner.config` + `scripts/app-icon-banner`) to any directory relative to the module root. KMP projects can now set `iosOutputDir = "../iosApp"` instead of importing the internal `ExportIosBannerConfigTask` class.
 - Linux font auto-detection for Android icon stamping. DejaVu, Liberation, FreeSans, and Ubuntu fonts are now probed automatically on Linux, enabling `assembleDebug` on GitHub Actions `ubuntu-latest` without manual `--font` configuration.
 
