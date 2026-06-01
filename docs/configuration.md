@@ -63,6 +63,19 @@ iOS resolution: `iosConfiguration` (exact name match) → `buildType` (case-inse
 
 `buildType("debug")` automatically maps to Xcode's "Debug" configuration — add `iosConfiguration` only when you have configurations beyond the standard Debug/Release set.
 
+## Android icon variants
+
+The plugin stamps these icon files per density bucket. Each behaves differently:
+
+| File | Stamped? | Reason |
+|---|---|---|
+| `ic_launcher.{png,webp}` | Yes | Legacy launcher icon |
+| `ic_launcher_round.{png,webp}` | Yes | Round launcher icon |
+| `ic_launcher_foreground.{png,webp}` | Yes | Adaptive icon foreground (safe-zone geometry applied) |
+| `ic_launcher_monochrome.{png,webp}` | **No** | The launcher applies a wallpaper-derived solid tint at display time (Material You / Android 13+). A color band would be invisible under the system tint, so the plugin copies it unmodified. |
+
+If your project uses XML vector drawables for the adaptive icon foreground instead of raster PNGs, the plugin generates a layer-list overlay that composites the original vector with a banner PNG per density.
+
 ## Advanced: variant-level override
 
 Use `variant()` when you need a unique banner for one specific combination of flavor + build type:

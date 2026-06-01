@@ -78,6 +78,7 @@ class AppIconBannerPlugin : Plugin<Project> {
     private fun resolveAndroidResDir(project: Project, extension: AppIconBannerExtension) =
         project.layout.projectDirectory.dir(
             extension.androidResDir
+                ?.also { validateAndroidResDir(it) }
                 ?: listOf("src/androidMain/res", "src/main/res")
                     .firstOrNull { project.layout.projectDirectory.dir(it).asFile.exists() }
                 ?: "src/main/res",

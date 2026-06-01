@@ -1,5 +1,6 @@
 package io.github.nkrebs13.appiconbanner.android
 
+import io.github.nkrebs13.appiconbanner.CLI_RESOURCE
 import org.gradle.api.DefaultTask
 import org.gradle.api.tasks.CacheableTask
 import org.gradle.api.file.DirectoryProperty
@@ -173,7 +174,7 @@ abstract class StampAndroidIconsTask : DefaultTask() {
         val monochromeNames = setOf("${base}_monochrome")
 
         var totalStamped = 0
-        var hasRasterForeground = false
+        var rasterForegroundFound = false
 
         try {
             mipmapDirs.forEach { mipmapDir ->
@@ -194,7 +195,7 @@ abstract class StampAndroidIconsTask : DefaultTask() {
 
                 val adaptiveFiles = findIcons(mipmapDir, adaptiveNames)
                 if (adaptiveFiles.isNotEmpty()) {
-                    hasRasterForeground = true
+                    rasterForegroundFound = true
                     totalStamped += stampIcons(
                         cli = cli,
                         workDir = File(workRoot, "${mipmapDir.name}-adaptive").also { it.mkdirs() },
@@ -217,11 +218,11 @@ abstract class StampAndroidIconsTask : DefaultTask() {
             // the adaptive icon foreground directly in drawable/ rather than per-density mipmap
             // dirs. Stamp it and output to drawable/ in the generated res so AGP merges it with
             // highest priority over the original.
-            if (!hasRasterForeground) {
+            if (!rasterForegroundFound) {
                 val drawableDir = File(source, "drawable")
                 val drawableForeground = findIcons(drawableDir, adaptiveNames)
                 if (drawableForeground.isNotEmpty()) {
-                    hasRasterForeground = true
+                    rasterForegroundFound = true
                     val outDrawableDir = File(output, "drawable").apply { mkdirs() }
                     totalStamped += stampIcons(
                         cli = cli,
@@ -240,7 +241,7 @@ abstract class StampAndroidIconsTask : DefaultTask() {
             // If there are no raster foreground images across any density bucket, check whether
             // the adaptive icon XML references an XML vector foreground. Reading from the adaptive
             // icon XML directly is authoritative — avoids guessing the drawable name/location.
-            if (!hasRasterForeground) {
+            if (!rasterForegroundFound) {
                 val xmlForeground = detectXmlVectorForeground(source, anydpiDirs)
                 if (xmlForeground != null) {
                     generateXmlForegroundOverlay(
@@ -464,7 +465,7 @@ abstract class StampAndroidIconsTask : DefaultTask() {
 
     private fun extractCli(dir: File): File {
         val cli = File(dir, "app-icon-banner")
-        javaClass.getResourceAsStream("/app-icon-banner")
+        javaClass.getResourceAsStream(CLI_RESOURCE)
             ?.use { input -> cli.outputStream().use { input.copyTo(it) } }
             ?: error("Bundled CLI resource missing from the plugin jar")
         cli.setExecutable(true, false)
