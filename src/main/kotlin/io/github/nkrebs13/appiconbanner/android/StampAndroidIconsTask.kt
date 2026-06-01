@@ -40,14 +40,21 @@ private const val BANNER_HEIGHT_DP = 24
 private const val BANNER_BOTTOM_DP = 22
 private const val BANNER_TOP_DP = 108 - BANNER_HEIGHT_DP - BANNER_BOTTOM_DP  // 62
 
-// Candidates checked in order; first found wins. Fontconfig is often absent on macOS
-// ImageMagick builds, so we use explicit paths rather than font names.
+// Candidates checked in order; first found wins. Fontconfig is often absent on macOS ImageMagick
+// builds, so we use explicit paths rather than font names. Linux paths cover GitHub Actions
+// ubuntu-latest where fonts-dejavu-core is pre-installed.
 private val FONT_CANDIDATES = listOf(
+    // macOS
     "/System/Library/Fonts/Helvetica.ttc",
     "/System/Library/Fonts/HelveticaNeue.ttc",
     "/System/Library/Fonts/SFNS.ttf",
     "/System/Library/Fonts/Supplemental/Arial.ttf",
     "/Library/Fonts/Arial.ttf",
+    // Linux (Ubuntu/Debian — pre-installed on GitHub Actions ubuntu-latest)
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+    "/usr/share/fonts/truetype/ubuntu/Ubuntu-B.ttf",
 )
 
 /**
@@ -214,7 +221,6 @@ abstract class StampAndroidIconsTask : DefaultTask() {
                 val xmlForeground = detectXmlVectorForeground(source, anydpiDirs)
                 if (xmlForeground != null) {
                     generateXmlForegroundOverlay(
-                        source = source,
                         output = output,
                         anydpiDirs = anydpiDirs,
                         color = color, label = label,
@@ -244,7 +250,7 @@ abstract class StampAndroidIconsTask : DefaultTask() {
      * with the same `-colorspace sRGB -strip` flags for consistency and idempotency.
      */
     private fun generateXmlForegroundOverlay(
-        source: File, output: File,
+        output: File,
         anydpiDirs: List<File>,
         color: String, label: String,
         base: String, variant: String,
@@ -367,6 +373,15 @@ abstract class StampAndroidIconsTask : DefaultTask() {
         color: String, label: String,
         heightPct: Int, bottomInsetPct: Int, textPct: Int,
     ): Int {
+        // Resolve font here so we fail fast with a clear Gradle error rather than letting the bash
+        // CLI fail mid-execution (especially on Linux CI where macOS system fonts don't exist).
+        val font = FONT_CANDIDATES.firstOrNull { File(it).exists() }
+            ?: error(
+                "app-icon-banner: no usable font found for Android icon stamping. " +
+                    "On macOS: install ImageMagick via Homebrew. " +
+                    "On Linux: install fonts-dejavu-core (sudo apt-get install -y fonts-dejavu-core).",
+            )
+
         sources.forEach { it.copyTo(File(workDir, it.name), overwrite = true) }
 
         val process = ProcessBuilder(
@@ -378,6 +393,7 @@ abstract class StampAndroidIconsTask : DefaultTask() {
             "--height-pct", heightPct.toString(),
             "--bottom-inset-pct", bottomInsetPct.toString(),
             "--text-pct", textPct.toString(),
+            "--font", font,
         ).redirectErrorStream(true).start()
 
         val cliOutput = process.inputStream.bufferedReader().readText()

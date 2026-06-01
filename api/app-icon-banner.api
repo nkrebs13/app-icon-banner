@@ -7,10 +7,12 @@ public class io/github/nkrebs13/appiconbanner/AppIconBannerExtension {
 	public final fun getAndroidIconName ()Ljava/lang/String;
 	public final fun getAndroidResDir ()Ljava/lang/String;
 	public final fun getDebugDefault ()Z
+	public final fun getIosOutputDir ()Ljava/lang/String;
 	public final fun iosConfiguration (Ljava/lang/String;Lorg/gradle/api/Action;)V
 	public final fun setAndroidIconName (Ljava/lang/String;)V
 	public final fun setAndroidResDir (Ljava/lang/String;)V
 	public final fun setDebugDefault (Z)V
+	public final fun setIosOutputDir (Ljava/lang/String;)V
 	public final fun variant (Ljava/lang/String;Lorg/gradle/api/Action;)V
 }
 

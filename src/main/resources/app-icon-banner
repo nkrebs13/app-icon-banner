@@ -156,7 +156,11 @@ if [[ -z "$FONT" ]]; then
     /System/Library/Fonts/HelveticaNeue.ttc \
     /System/Library/Fonts/SFNS.ttf \
     /System/Library/Fonts/Supplemental/Arial.ttf \
-    /Library/Fonts/Arial.ttf; do
+    /Library/Fonts/Arial.ttf \
+    /usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf \
+    /usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf \
+    /usr/share/fonts/truetype/freefont/FreeSans.ttf \
+    /usr/share/fonts/truetype/ubuntu/Ubuntu-B.ttf; do
     if [[ -f "$candidate" ]]; then FONT="$candidate"; break; fi
   done
 fi

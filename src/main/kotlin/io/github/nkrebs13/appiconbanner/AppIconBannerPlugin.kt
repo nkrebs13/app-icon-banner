@@ -81,8 +81,16 @@ class AppIconBannerPlugin : Plugin<Project> {
             description =
                 "Export the iOS banner config (app-icon-banner.config) and install the stamping CLI."
             configLines.set(project.provider { extension.iosConfigLines() })
-            outputConfig.set(project.layout.projectDirectory.file("app-icon-banner.config"))
-            outputCli.set(project.layout.projectDirectory.file("scripts/app-icon-banner"))
+            // Resolve the output root lazily so that `iosOutputDir` set anywhere in the build
+            // script is visible here — even if set after the plugin block. Use convention() so an
+            // explicit task-level set() still takes precedence for unusual project layouts.
+            val iosRoot = project.providers.provider {
+                extension.iosOutputDir
+                    ?.let { project.layout.projectDirectory.dir(it) }
+                    ?: project.layout.projectDirectory
+            }
+            outputConfig.convention(iosRoot.map { it.file("app-icon-banner.config") })
+            outputCli.convention(iosRoot.map { it.dir("scripts").file("app-icon-banner") })
         }
     }
 

@@ -10,34 +10,53 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.io.File
 
-// NOTE: The Android wiring path (onVariants callback → easylauncher ColorRibbonFilter registration)
-// is not unit-testable via ProjectBuilder because AGP's onVariants lifecycle requires a full Gradle
-// build execution (not just configuration) to fire variant callbacks. The core logic is covered by
-// AppIconBannerExtensionTest (resolution priority, defaults, validation). The wiring itself is
-// VERIFICATION-PENDING-HUMAN: apply the plugin in a real Android/KMP project and confirm that
-// debug variants show the banner ribbon and release variants do not.
+// NOTE: The Android wiring path (onVariants callback → StampAndroidIconsTask registration per
+// variant) is not unit-testable via ProjectBuilder because AGP's onVariants lifecycle requires a
+// full Gradle build execution (not just configuration) to fire variant callbacks. The core logic
+// is covered by AppIconBannerExtensionTest (resolution priority, defaults, validation). The wiring
+// itself is VERIFICATION-PENDING-HUMAN: apply the plugin in a real Android/KMP project and confirm
+// that debug variants show the banner and release variants do not.
 class AppIconBannerPluginTest {
 
     @Test
     fun `plugin applied to a non-Android project registers extension and iOS task only`() {
-        // Covers iOS-only and plain Kotlin projects (no AGP). Verifies the extension is registered
-        // and no easylauncher wiring fires without an Android plugin present.
+        // Covers iOS-only and plain Kotlin projects (no AGP). Without an Android plugin the
+        // onVariants callback never fires, so no StampAndroidIconsTask instances are registered.
         val project = ProjectBuilder.builder().build()
         project.pluginManager.apply("io.github.nkrebs13.app-icon-banner")
 
         assertNotNull(project.extensions.findByName("appIconBanner"))
         assertNotNull(project.tasks.findByName("exportIosBannerConfig"))
-        assertNull(project.extensions.findByName("easylauncher"))
-        assertTrue(project.tasks.names.none { it.contains("easylauncher", ignoreCase = true) })
+        assertTrue(
+            project.tasks.names.none { it.startsWith("stamp") && it.endsWith("AndroidIcons") },
+            "no StampAndroidIconsTask should be registered without an Android plugin",
+        )
     }
 
     @Test
-    fun `extension defaults for android properties are correct`() {
+    fun `extension defaults are correct`() {
         val project = ProjectBuilder.builder().build()
         project.pluginManager.apply("io.github.nkrebs13.app-icon-banner")
         val ext = project.extensions.getByType(AppIconBannerExtension::class.java)
         assertEquals("ic_launcher", ext.androidIconName, "androidIconName default should be ic_launcher")
         assertNull(ext.androidResDir, "androidResDir default should be null (auto-detect)")
+        assertNull(ext.iosOutputDir, "iosOutputDir default should be null (module root)")
+    }
+
+    @Test
+    fun `iosOutputDir redirects config and CLI to the specified directory`(@TempDir tempDir: File) {
+        val project = ProjectBuilder.builder().withProjectDir(tempDir).build()
+        project.pluginManager.apply("io.github.nkrebs13.app-icon-banner")
+
+        val ext = project.extensions.getByType(AppIconBannerExtension::class.java)
+        ext.iosOutputDir = "iosApp"
+        ext.buildType("debug") { color = "#0288D1"; label = "DEBUG" }
+
+        val task = project.tasks.getByName("exportIosBannerConfig") as ExportIosBannerConfigTask
+        task.export()
+
+        assertTrue(File(tempDir, "iosApp/app-icon-banner.config").exists(), "config should be in iosApp/")
+        assertTrue(File(tempDir, "iosApp/scripts/app-icon-banner").exists(), "CLI should be in iosApp/scripts/")
     }
 
     @Test

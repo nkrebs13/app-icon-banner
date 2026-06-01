@@ -2,9 +2,9 @@ package io.github.nkrebs13.appiconbanner
 
 import org.gradle.api.Action
 
-// #RRGGBB only — matches what java.awt.Color.decode() (used by easylauncher) and ImageMagick
-// both accept unambiguously. 4-digit #ARGB and 8-digit #AARRGGBB throw NumberFormatException in
-// java.awt.Color.decode() and are rejected here to surface the error at DSL configuration time.
+// #RRGGBB only — the format ImageMagick accepts unambiguously for both xc: color specs and
+// -fill values. 4-digit #ARGB and 8-digit #AARRGGBB are rejected here to surface the error at
+// DSL configuration time rather than at ImageMagick invocation.
 private val COLOR_REGEX = Regex("^#[0-9A-Fa-f]{6}$")
 
 /**
@@ -42,8 +42,8 @@ class BannerSpec {
  * ```kotlin
  * appIconBanner {
  *     buildType("debug")   { color = "#0288D1"; label = "DEBUG" }
- *     flavor("meta")       { color = "#FF6F00"; label = "META" }
- *     variant("metaDebug") { color = "#7B1FA2"; label = "META·DBG" }
+ *     flavor("staging")       { color = "#FF6F00"; label = "STAGING" }
+ *     variant("stagingDebug") { color = "#7B1FA2"; label = "STAGING·DBG" }
  *     iosConfiguration("Firebase") { color = "#FF6F00"; label = "FIREBASE" }
  * }
  * ```
@@ -73,6 +73,21 @@ open class AppIconBannerExtension {
      * uses a custom icon name.
      */
     var androidIconName: String = "ic_launcher"
+
+    /**
+     * Root directory for iOS outputs (the `app-icon-banner.config` file and the
+     * `scripts/app-icon-banner` CLI), relative to this module's root. Leave null to default to
+     * the module directory itself.
+     *
+     * In a KMP project the Android module and the iOS app are typically siblings, so set this to
+     * redirect outputs next to the Xcode project:
+     * ```kotlin
+     * appIconBanner {
+     *     iosOutputDir = "../iosApp"
+     * }
+     * ```
+     */
+    var iosOutputDir: String? = null
 
     internal val buildTypes = linkedMapOf<String, BannerSpec>()
     internal val flavors = linkedMapOf<String, BannerSpec>()
