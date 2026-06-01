@@ -2,26 +2,22 @@
 
 ## [Unreleased]
 
-### Added
-- `docs/configuration.md`: new "Android icon variants" table documenting which icon files are stamped and why monochrome icons are intentionally skipped (Material You compatibility).
-- `CONTRIBUTING.md`: testing strategy table explaining the scope and constraints of each test file, including why `onVariants` wiring cannot be tested with `ProjectBuilder`.
-- `CONTRIBUTING.md` PR checklist: reminder to keep README version number in sync with `build.gradle.kts` on each release.
-- Label length cap: labels longer than 100 characters now throw an `IllegalArgumentException` at DSL configuration time with a clear message, rather than producing nonsensical ImageMagick output.
-- `ExportIosBannerConfigTask` warns (at `lifecycle` level) when no banner configurations are found and the exported config file will be empty.
-
-### Changed
-- `CLI_RESOURCE` constant extracted to a shared `PluginConstants.kt` file — previously the classpath path `"/app-icon-banner"` was duplicated between `ExportIosBannerConfigTask` and `StampAndroidIconsTask`.
-- `hasRasterForeground` accumulator flag in `StampAndroidIconsTask.stamp()` renamed to `rasterForegroundFound` for clarity.
-- `androidResDir` now rejects paths containing `..` at configuration time, mirroring the existing absolute-path guard on `iosOutputDir`.
+## [0.1.2] — 2026-06-01
 
 ### Added
 - `iosOutputDir` extension property — redirect iOS outputs (`app-icon-banner.config` + `scripts/app-icon-banner`) to any directory relative to the module root. KMP projects can now set `iosOutputDir = "../iosApp"` instead of importing the internal `ExportIosBannerConfigTask` class.
 - Linux font auto-detection for Android icon stamping. DejaVu, Liberation, FreeSans, and Ubuntu fonts are now probed automatically on Linux, enabling `assembleDebug` on GitHub Actions `ubuntu-latest` without manual `--font` configuration.
+- Label length cap: labels longer than 100 characters now throw an `IllegalArgumentException` at DSL configuration time with a clear message, rather than producing nonsensical ImageMagick output.
+- `ExportIosBannerConfigTask` warns when no banner configurations are found and the exported config file will be empty.
+- `docs/configuration.md`: Android icon variants table documenting which icon files are stamped and why monochrome icons are intentionally skipped (Material You / Android 13+ compatibility).
+- `CONTRIBUTING.md`: testing strategy table and `onVariants`/ProjectBuilder limitation explanation.
 
 ### Changed
 - `exportIosBannerConfig` output paths now use `convention()` instead of `set()`, so task-level overrides via `tasks.named<ExportIosBannerConfigTask>` still take precedence for unusual project layouts.
 - `StampAndroidIconsTask` resolves the font path before invoking the bundled CLI and passes it explicitly via `--font`, ensuring consistent font resolution behavior across macOS and Linux.
-- README restructured: the full iOS setup walkthrough moved to `docs/ios-setup.md`; the complete DSL reference moved to `docs/configuration.md`. The README is now a glanceable entry point.
+- `androidResDir` now rejects absolute paths and paths containing `..` at configuration time, symmetric with the existing `iosOutputDir` guard.
+- `CLI_RESOURCE` constant consolidated into a shared `PluginConstants.kt` (was duplicated between `ExportIosBannerConfigTask` and `StampAndroidIconsTask`).
+- README restructured: iOS setup walkthrough moved to `docs/ios-setup.md`; DSL reference moved to `docs/configuration.md`.
 
 ### Fixed
 - Android banner stamping on Linux CI would fail silently (no font found) because the font candidate list was macOS-only. Both the Kotlin task and the bundled bash CLI now include Linux font paths.
@@ -50,4 +46,6 @@
 - Binary Compatibility Validator baseline for API surface enforcement.
 - GitHub Actions: build + test on Ubuntu + macOS; publish to Gradle Plugin Portal on `v*.*.*` tags.
 
+[0.1.2]: https://github.com/nkrebs13/app-icon-banner/releases/tag/v0.1.2
+[0.1.1]: https://github.com/nkrebs13/app-icon-banner/releases/tag/v0.1.1
 [0.1.0]: https://github.com/nkrebs13/app-icon-banner/releases/tag/v0.1.0
