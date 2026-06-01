@@ -108,6 +108,9 @@ class CliSmokeTest {
             StampAndroidIconsTask::class.java,
         ).get()
 
+        val font = StampAndroidIconsTask.FONT_CANDIDATES.firstOrNull { File(it).exists() }
+        assumeTrue(font != null, "No system font found")
+
         val outputDir = File(dir, "build/generated/app-icon-banner/debug/res")
         task.sourceResDir.set(resDir)
         task.bannerColor.set("#0288D1")
@@ -115,6 +118,7 @@ class CliSmokeTest {
         task.iconName.set("ic_launcher")
         task.variantName.set("debug")
         task.outputDir.set(outputDir)
+        task.fontPath.set(font)
 
         task.stamp()
 
@@ -176,6 +180,9 @@ class CliSmokeTest {
             StampAndroidIconsTask::class.java,
         ).get()
 
+        val font = StampAndroidIconsTask.FONT_CANDIDATES.firstOrNull { File(it).exists() }
+        assumeTrue(font != null, "No system font found")
+
         val outputDir = File(dir, "build/generated/app-icon-banner/debug/res")
         task.sourceResDir.set(resDir)
         task.bannerColor.set("#0288D1")
@@ -183,6 +190,7 @@ class CliSmokeTest {
         task.iconName.set("ic_launcher")
         task.variantName.set("debug")
         task.outputDir.set(outputDir)
+        task.fontPath.set(font)
 
         task.stamp()
 

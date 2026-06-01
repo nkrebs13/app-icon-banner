@@ -6,6 +6,7 @@ import io.github.nkrebs13.appiconbanner.ios.ExportIosBannerConfigTask
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.kotlin.dsl.register
+import java.io.File
 
 /**
  * Wires the `appIconBanner { }` DSL to:
@@ -49,6 +50,13 @@ class AppIconBannerPlugin : Plugin<Project> {
                             "generated/app-icon-banner/${variant.name}/res",
                         ),
                     )
+                    // Wire fontPath so it is tracked as a cache-key input. Different fonts
+                    // (macOS Helvetica vs Linux DejaVu) produce slightly different rendered
+                    // output; without this, a remote build cache hit from another OS would
+                    // serve incorrect cached icons.
+                    fontPath.set(project.providers.provider {
+                        StampAndroidIconsTask.FONT_CANDIDATES.firstOrNull { File(it).exists() }
+                    })
                 }
 
                 variant.sources.res?.addGeneratedSourceDirectory(
@@ -81,13 +89,20 @@ class AppIconBannerPlugin : Plugin<Project> {
             description =
                 "Export the iOS banner config (app-icon-banner.config) and install the stamping CLI."
             configLines.set(project.provider { extension.iosConfigLines() })
+            // Capture projectDirectory outside the provider lambda — Project is not
+            // config-cache serializable, but Directory (a FileSystemLocation) is.
+            val projectDir = project.layout.projectDirectory
             // Resolve the output root lazily so that `iosOutputDir` set anywhere in the build
             // script is visible here — even if set after the plugin block. Use convention() so an
             // explicit task-level set() still takes precedence for unusual project layouts.
             val iosRoot = project.providers.provider {
-                extension.iosOutputDir
-                    ?.let { project.layout.projectDirectory.dir(it) }
-                    ?: project.layout.projectDirectory
+                extension.iosOutputDir?.let { dir ->
+                    require(!File(dir).isAbsolute) {
+                        "appIconBanner.iosOutputDir must be a relative path (got: '$dir'). " +
+                            "Use '../iosApp' to target a sibling directory."
+                    }
+                    projectDir.dir(dir)
+                } ?: projectDir
             }
             outputConfig.convention(iosRoot.map { it.file("app-icon-banner.config") })
             outputCli.convention(iosRoot.map { it.dir("scripts").file("app-icon-banner") })

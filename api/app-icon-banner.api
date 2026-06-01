@@ -58,14 +58,19 @@ public final class io/github/nkrebs13/appiconbanner/BannerSpec {
 }
 
 public abstract class io/github/nkrebs13/appiconbanner/android/StampAndroidIconsTask : org/gradle/api/DefaultTask {
+	public static final field Companion Lio/github/nkrebs13/appiconbanner/android/StampAndroidIconsTask$Companion;
 	public fun <init> ()V
 	public abstract fun getBannerColor ()Lorg/gradle/api/provider/Property;
 	public abstract fun getBannerLabel ()Lorg/gradle/api/provider/Property;
+	public abstract fun getFontPath ()Lorg/gradle/api/provider/Property;
 	public abstract fun getIconName ()Lorg/gradle/api/provider/Property;
 	public abstract fun getOutputDir ()Lorg/gradle/api/file/DirectoryProperty;
 	public abstract fun getSourceResDir ()Lorg/gradle/api/file/DirectoryProperty;
 	public abstract fun getVariantName ()Lorg/gradle/api/provider/Property;
 	public final fun stamp ()V
+}
+
+public final class io/github/nkrebs13/appiconbanner/android/StampAndroidIconsTask$Companion {
 }
 
 public abstract class io/github/nkrebs13/appiconbanner/ios/ExportIosBannerConfigTask : org/gradle/api/DefaultTask {

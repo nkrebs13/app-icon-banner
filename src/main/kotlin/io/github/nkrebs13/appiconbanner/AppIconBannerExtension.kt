@@ -32,6 +32,12 @@ class BannerSpec {
         require('%' !in resolvedLabel) {
             "appIconBanner: label '$resolvedLabel' must not contain '%' — ImageMagick interprets %-prefixed sequences in annotation text"
         }
+        require(!resolvedLabel.startsWith("@")) {
+            "appIconBanner: label '$resolvedLabel' must not start with '@' — ImageMagick interprets @-prefixed text as a filename to read from disk"
+        }
+        require('\n' !in resolvedLabel && '\r' !in resolvedLabel) {
+            "appIconBanner: label '$resolvedLabel' must not contain newline characters"
+        }
         return BannerConfig(color = resolvedColor, label = resolvedLabel)
     }
 }

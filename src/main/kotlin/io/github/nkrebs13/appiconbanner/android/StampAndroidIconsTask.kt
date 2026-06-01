@@ -6,6 +6,7 @@ import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputDirectory
+import org.gradle.api.tasks.Optional
 import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
@@ -40,22 +41,6 @@ private const val BANNER_HEIGHT_DP = 24
 private const val BANNER_BOTTOM_DP = 22
 private const val BANNER_TOP_DP = 108 - BANNER_HEIGHT_DP - BANNER_BOTTOM_DP  // 62
 
-// Candidates checked in order; first found wins. Fontconfig is often absent on macOS ImageMagick
-// builds, so we use explicit paths rather than font names. Linux paths cover GitHub Actions
-// ubuntu-latest where fonts-dejavu-core is pre-installed.
-private val FONT_CANDIDATES = listOf(
-    // macOS
-    "/System/Library/Fonts/Helvetica.ttc",
-    "/System/Library/Fonts/HelveticaNeue.ttc",
-    "/System/Library/Fonts/SFNS.ttf",
-    "/System/Library/Fonts/Supplemental/Arial.ttf",
-    "/Library/Fonts/Arial.ttf",
-    // Linux (Ubuntu/Debian — pre-installed on GitHub Actions ubuntu-latest)
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-    "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
-    "/usr/share/fonts/truetype/ubuntu/Ubuntu-B.ttf",
-)
 
 /**
  * Stamps the color+label banner onto all Android launcher icons for one variant, writing
@@ -116,6 +101,37 @@ abstract class StampAndroidIconsTask : DefaultTask() {
     @get:OutputDirectory
     abstract val outputDir: DirectoryProperty
 
+    /**
+     * Path to a TrueType or TrueType Collection font file for banner text rendering. Must be set
+     * by the plugin (via [FONT_CANDIDATES] probe) to be part of the task's cache key — different
+     * fonts produce different outputs, so this must be tracked as an `@Input`.
+     *
+     * Leave unset to use the probe result from [AppIconBannerPlugin]; the task throws with a
+     * clear message if unset (null) at execution time.
+     */
+    @get:Input
+    @get:Optional
+    abstract val fontPath: Property<String>
+
+    companion object {
+        // Candidates checked in order; first found wins. Fontconfig is often absent on macOS
+        // ImageMagick builds, so we use explicit paths rather than font names. Linux paths cover
+        // GitHub Actions ubuntu-latest where fonts-dejavu-core is pre-installed.
+        internal val FONT_CANDIDATES = listOf(
+            // macOS
+            "/System/Library/Fonts/Helvetica.ttc",
+            "/System/Library/Fonts/HelveticaNeue.ttc",
+            "/System/Library/Fonts/SFNS.ttf",
+            "/System/Library/Fonts/Supplemental/Arial.ttf",
+            "/Library/Fonts/Arial.ttf",
+            // Linux (Ubuntu/Debian — pre-installed on GitHub Actions ubuntu-latest)
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+            "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+            "/usr/share/fonts/truetype/ubuntu/Ubuntu-B.ttf",
+        )
+    }
+
     @TaskAction
     fun stamp() {
         val source = sourceResDir.get().asFile
@@ -147,9 +163,10 @@ abstract class StampAndroidIconsTask : DefaultTask() {
         val label = bannerLabel.get()
         val base = iconName.get()
         val variant = variantName.get()
-        // Resolve once — stable for the entire task execution. Passed to stampIcons() and
-        // generateXmlForegroundOverlay() so neither needs to re-probe on every call.
-        val font: String? = FONT_CANDIDATES.firstOrNull { File(it).exists() }
+        // fontPath is wired by AppIconBannerPlugin via FONT_CANDIDATES probe (tracked as @Input
+        // so different fonts on different machines produce different cache keys). When manually
+        // instantiated in tests, fontPath may be unset — null propagates to stampIcons() / overlay.
+        val font: String? = fontPath.orNull
 
         val legacyNames = setOf(base, "${base}_round")
         val adaptiveNames = setOf("${base}_foreground")

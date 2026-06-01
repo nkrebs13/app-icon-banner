@@ -1,5 +1,6 @@
 package io.github.nkrebs13.appiconbanner
 
+import io.github.nkrebs13.appiconbanner.android.StampAndroidIconsTask
 import io.github.nkrebs13.appiconbanner.ios.ExportIosBannerConfigTask
 import org.gradle.testfixtures.ProjectBuilder
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -7,8 +8,11 @@ import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.io.TempDir
+import java.awt.image.BufferedImage
 import java.io.File
+import javax.imageio.ImageIO
 
 // NOTE: The Android wiring path (onVariants callback → StampAndroidIconsTask registration per
 // variant) is not unit-testable via ProjectBuilder because AGP's onVariants lifecycle requires a
@@ -63,6 +67,32 @@ class AppIconBannerPluginTest {
 
         assertTrue(File(tempDir, "iosApp/app-icon-banner.config").exists(), "config should be in iosApp/")
         assertTrue(File(tempDir, "iosApp/scripts/app-icon-banner").exists(), "CLI should be in iosApp/scripts/")
+    }
+
+    @Test
+    fun `stamp throws when fontPath is not set`(@TempDir tempDir: File) {
+        // Exercises the null-font error path in stampIcons() without requiring ImageMagick.
+        // BufferedImage + ImageIO produces a valid PNG; the error fires before the CLI is invoked.
+        val resDir = File(tempDir, "res").apply { mkdirs() }
+        val mipmapDir = File(resDir, "mipmap-xxhdpi").apply { mkdirs() }
+        val icon = File(mipmapDir, "ic_launcher.png")
+        ImageIO.write(BufferedImage(144, 144, BufferedImage.TYPE_INT_RGB), "png", icon)
+
+        val project = ProjectBuilder.builder().withProjectDir(tempDir).build()
+        val task = project.tasks.register("stamp", StampAndroidIconsTask::class.java).get()
+        task.sourceResDir.set(resDir)
+        task.bannerColor.set("#0288D1")
+        task.bannerLabel.set("DEBUG")
+        task.iconName.set("ic_launcher")
+        task.variantName.set("debug")
+        task.outputDir.set(File(tempDir, "build/output"))
+        // fontPath deliberately left unset — simulates a machine with no recognised fonts
+
+        val ex = assertThrows<IllegalStateException> { task.stamp() }
+        assertTrue(
+            ex.message?.contains("no usable font") == true,
+            "Expected 'no usable font' in: ${ex.message}",
+        )
     }
 
     @Test
