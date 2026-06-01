@@ -58,6 +58,19 @@ class AppIconBannerPluginTest {
     }
 
     @Test
+    fun `iosOutputDir rejects absolute paths with a clear error`(@TempDir tempDir: File) {
+        val task = buildExportProject(tempDir) {
+            iosOutputDir = "/tmp/absolute-path"
+            buildType("debug") { color = "#0288D1"; label = "DEBUG" }
+        }
+        // Gradle wraps provider evaluation exceptions — traverse the cause chain for the message.
+        val ex = assertThrows<RuntimeException> { task.export() }
+        val hasRelativeMsg = generateSequence(ex as Throwable) { it.cause }
+            .any { it.message?.contains("relative") == true }
+        assertTrue(hasRelativeMsg, "Expected 'relative' in exception chain: $ex")
+    }
+
+    @Test
     fun `iosOutputDir redirects config and CLI to the specified directory`(@TempDir tempDir: File) {
         val task = buildExportProject(tempDir) {
             iosOutputDir = "iosApp"
