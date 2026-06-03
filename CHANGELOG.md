@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [0.1.3] — 2026-06-03
+
+### Added
+- `BannerSpec.textSizePct` — override the default 55% text-size-to-band-height ratio per build type / flavor / variant (Android). Useful for long labels that would otherwise be auto-shrunk.
+- `BannerSpec.bold` — prefer bold system font variants for Android icon stamping. On macOS, selects explicit bold font files (e.g. `Arial Bold.ttf`); on Linux, prefers `DejaVuSans-Bold.ttf` and `LiberationSans-Bold.ttf`.
+- CLI `--safe-width-pct` argument — confines the label text to a centered sub-region of the band. When `< 100`, the font is auto-shrunk (0.6 × fontsize per character estimate) until the label fits within the safe area. The colored band itself remains full-width.
+
+### Fixed
+- **Circle launcher text clipping** — the "I" and "L" in labels like "INTERNAL" were cut off on circle-masked homescreen icons. Two root causes fixed:
+  - `ic_launcher_round` legacy icons now stamp with `bottomInsetPct=10` (lifted from 0) to keep the band in the wider part of the circular mask. The task also computes and passes `--safe-width-pct` based on the circle geometry at the band center, so auto-shrink engages for unusually long labels.
+  - `ic_launcher_foreground` (adaptive icon) now passes `--safe-width-pct` derived from the 66dp-diameter circle safe zone inscribed in the 108dp adaptive canvas. The XML overlay path (vector foreground) applies the same constraint via the Kotlin-level banner PNG generation.
+
 ## [0.1.2] — 2026-06-01
 
 ### Added

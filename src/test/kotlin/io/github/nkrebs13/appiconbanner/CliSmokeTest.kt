@@ -48,6 +48,28 @@ class CliSmokeTest {
     }
 
     @Test
+    fun `--safe-width-pct constrains text to a sub-region and exits 0`(@TempDir dir: File) {
+        val magick = imageMagickWithFreetype()
+        assumeTrue(magick != null, "Freetype-enabled ImageMagick not available")
+
+        val cli = extractCli(dir)
+        val mipmapDir = File(dir, "mipmap-xxhdpi").apply { mkdirs() }
+        val icon = File(mipmapDir, "ic_launcher_round.png")
+        run(dir, listOf(magick!!, "-size", "144x144", "gradient:#1a73e8-#34a853", icon.path))
+
+        val args = listOf(
+            cli.path,
+            "--appiconset", mipmapDir.path,
+            "--no-base",
+            "--color", "#FF6F00",
+            "--label", "INTERNAL",
+            "--safe-width-pct", "70",
+        )
+        assertEquals(0, run(dir, args), "should stamp with --safe-width-pct and exit 0")
+        assertTrue(icon.length() > 0, "icon should be non-empty after stamp")
+    }
+
+    @Test
     fun `Android --no-base mode stamps icons directly and exits 0`(@TempDir dir: File) {
         val magick = imageMagickWithFreetype()
         assumeTrue(magick != null, "Freetype-enabled ImageMagick not available")
@@ -88,16 +110,19 @@ class CliSmokeTest {
         val mipmapDir = File(resDir, "mipmap-xxhdpi").apply { mkdirs() }
 
         val legacyIcon = File(mipmapDir, "ic_launcher.png")
+        val roundIcon = File(mipmapDir, "ic_launcher_round.png")
         val foregroundIcon = File(mipmapDir, "ic_launcher_foreground.png")
         val monochromeIcon = File(mipmapDir, "ic_launcher_monochrome.png")
 
         // 144×144 standard launcher size for xxhdpi; 432×432 for foreground/monochrome.
         val im = magick!!
         run(dir, listOf(im, "-size", "144x144", "gradient:#1a73e8-#34a853", legacyIcon.path))
+        run(dir, listOf(im, "-size", "144x144", "gradient:#1a73e8-#34a853", roundIcon.path))
         run(dir, listOf(im, "-size", "432x432", "gradient:#1a73e8-#34a853", foregroundIcon.path))
         run(dir, listOf(im, "-size", "432x432", "gradient:#888888-#444444", monochromeIcon.path))
 
         val originalLegacySha = sha256(legacyIcon)
+        val originalRoundSha = sha256(roundIcon)
         val originalForegroundSha = sha256(foregroundIcon)
         val originalMonochromeSha = sha256(monochromeIcon)
 
@@ -126,11 +151,18 @@ class CliSmokeTest {
         assertTrue(outMipmap.exists(), "output mipmap directory should be created")
 
         val outLegacy = File(outMipmap, "ic_launcher.png")
+        val outRound = File(outMipmap, "ic_launcher_round.png")
         val outForeground = File(outMipmap, "ic_launcher_foreground.png")
         val outMonochrome = File(outMipmap, "ic_launcher_monochrome.png")
 
         assertTrue(outLegacy.exists(), "legacy icon should be in output")
         assertNotEquals(originalLegacySha, sha256(outLegacy), "legacy icon should be stamped")
+
+        assertTrue(outRound.exists(), "round icon should be in output")
+        assertNotEquals(originalRoundSha, sha256(outRound),
+            "round icon should be stamped (new path: bottomInsetPct=10, circle-safe width)")
+        assertNotEquals(sha256(outLegacy), sha256(outRound),
+            "round icon band position (bottomInsetPct=10) must differ from square (bottomInsetPct=0)")
 
         assertTrue(outForeground.exists(), "adaptive foreground should be in output")
         assertNotEquals(originalForegroundSha, sha256(outForeground), "foreground should be stamped")

@@ -54,9 +54,16 @@ class AppIconBannerPlugin : Plugin<Project> {
                     // (macOS Helvetica vs Linux DejaVu) produce slightly different rendered
                     // output; without this, a remote build cache hit from another OS would
                     // serve incorrect cached icons.
+                    // When bold=true, prefer explicit bold font files (BOLD_FONT_CANDIDATES).
+                    val fontCandidates = if (config.bold) {
+                        StampAndroidIconsTask.BOLD_FONT_CANDIDATES
+                    } else {
+                        StampAndroidIconsTask.FONT_CANDIDATES
+                    }
                     fontPath.set(project.providers.provider {
-                        StampAndroidIconsTask.FONT_CANDIDATES.firstOrNull { File(it).exists() }
+                        fontCandidates.firstOrNull { File(it).exists() }
                     })
+                    config.textSizePct?.let { bannerTextSizePct.set(it) }
                 }
 
                 variant.sources.res?.addGeneratedSourceDirectory(

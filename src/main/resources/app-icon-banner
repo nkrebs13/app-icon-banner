@@ -32,6 +32,7 @@ NO_BASE=false
 HEIGHT_PCT=18           # band height as % of icon height
 BOTTOM_INSET_PCT=8      # band bottom edge sits this % above icon bottom (clears iOS squircle)
 TEXT_PCT=55             # text point size as % of band height
+SAFE_WIDTH_PCT=100      # text is confined to this % of the icon width, centered (circle-mask fix)
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -46,6 +47,7 @@ while [[ $# -gt 0 ]]; do
     --height-pct)        HEIGHT_PCT="${2:-}"; shift 2 ;;
     --bottom-inset-pct)  BOTTOM_INSET_PCT="${2:-}"; shift 2 ;;
     --text-pct)          TEXT_PCT="${2:-}"; shift 2 ;;
+    --safe-width-pct)    SAFE_WIDTH_PCT="${2:-}"; shift 2 ;;
     -h|--help)           sed -n '3,22p' "$0"; exit 0 ;;
     *) echo "app-icon-banner: unknown argument: $1" >&2; exit 2 ;;
   esac
@@ -184,17 +186,40 @@ for icon in "$APPICONSET"/*.png "$APPICONSET"/*.webp; do
   band=$(( H * HEIGHT_PCT / 100 ))
   [[ "$band" -lt 1 ]] && band=1
   inset=$(( H * BOTTOM_INSET_PCT / 100 ))
+
+  # safe_w: the width available for text, centered within the full band. Callers pass
+  # --safe-width-pct < 100 for icons that will be circle-masked (round legacy icons and
+  # adaptive foreground), so the label never extends into the clipped corners.
+  safe_w=$(( W * SAFE_WIDTH_PCT / 100 ))
+  [[ "$safe_w" -lt 1 ]] && safe_w=1
+
+  # Auto-shrink font until estimated text width fits safe_w.
+  # 0.6 × fontsize per character is a well-known approximation for proportional sans-serif.
   fontsize=$(( band * TEXT_PCT / 100 ))
   [[ "$fontsize" -lt 6 ]] && fontsize=6
+  while [[ "$fontsize" -gt 6 ]]; do
+    est_w=$(( ${#LABEL} * fontsize * 6 / 10 ))
+    [[ "$est_w" -le "$safe_w" ]] && break
+    fontsize=$(( fontsize - 1 ))
+  done
 
   # -colorspace sRGB -type TrueColor: guards against grayscale source icons (a grayscale base
   # would collapse the colored band to gray during compositing). Works for both PNG and WebP.
   # -strip: removes metadata so repeated runs are byte-for-byte identical (idempotency).
   # +0+$inset: lifts the band off the bottom edge — clears the iOS squircle mask curve and the
   # Android adaptive icon safe-zone boundary (caller sets BOTTOM_INSET_PCT accordingly).
+  # Two-layer composite: full-width colored band + safe_w-wide text canvas centered on it.
+  # When safe_w < W, text cannot reach corners clipped by a circular launcher mask.
+  # Three -gravity scopes, each applying to a different sub-image context:
+  #   (1) inner \(...\) -gravity center: centers -annotate text within the safe_w canvas
+  #   (2) -gravity center -composite: centers the text canvas onto the full-width color band
+  #   (3) -gravity south -geometry: anchors the finished band to the icon bottom
   "${IM[@]}" "$icon" -colorspace sRGB -type TrueColor \
     \( -size "${W}x${band}" "xc:${COLOR}" \
-       -font "$FONT" -fill white -gravity center -pointsize "$fontsize" -annotate 0 "$LABEL" \) \
+       \( -size "${safe_w}x${band}" "xc:none" \
+          -font "$FONT" -fill white -gravity center \
+          -pointsize "$fontsize" -annotate 0 "$LABEL" \) \
+       -gravity center -composite \) \
     -gravity south -geometry "+0+${inset}" -composite \
     -define webp:lossless=true \
     -strip \

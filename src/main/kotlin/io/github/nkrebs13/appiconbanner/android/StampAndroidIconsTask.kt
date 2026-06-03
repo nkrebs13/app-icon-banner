@@ -32,7 +32,12 @@ private val ADAPTIVE_CANVAS_PX = mapOf(
 //   We use 20% inset and 22% height to clear the outer parallax/mask region with margin.
 private const val ADAPTIVE_HEIGHT_PCT = 22
 private const val ADAPTIVE_BOTTOM_INSET_PCT = 20
-private const val ADAPTIVE_TEXT_PCT = 55
+
+// Banner geometry for round (circle-masked) legacy icons.
+//   bottomInsetPct=10 lifts the band away from the icon bottom, placing it where the circle
+//   mask chord is ~78% of the icon width — wide enough for standard labels at default font size.
+private const val ROUND_HEIGHT_PCT = 18
+private const val ROUND_BOTTOM_INSET_PCT = 10
 
 // dp values used in the layer-list XML (density-independent; same XML works at all densities).
 //   banner height dp  = round(108 × 22/100) = 24dp
@@ -50,7 +55,8 @@ private const val BANNER_TOP_DP = 108 - BANNER_HEIGHT_DP - BANNER_BOTTOM_DP  // 
  * **Raster icons** (PNG/WebP in `mipmap-{density}/`): stamped directly using the ImageMagick CLI.
  *
  * - `ic_launcher.{png,webp}` — legacy launcher icon, flat geometry (no inset needed).
- * - `ic_launcher_round.{png,webp}` — round launcher icon, same flat geometry.
+ * - `ic_launcher_round.{png,webp}` — round launcher icon, stamped with a 10% bottom inset and
+ *   a circle-safe text width so the label is not clipped by circular launcher masks.
  * - `ic_launcher_foreground.{png,webp}` — adaptive icon foreground (raster), stamped inside
  *   the 72/108 dp safe zone (22% height, 20% bottom inset) to survive all launcher mask shapes.
  * - `ic_launcher_monochrome.{png,webp}` — **not** stamped; the launcher applies its own
@@ -114,6 +120,14 @@ abstract class StampAndroidIconsTask : DefaultTask() {
     @get:Optional
     abstract val fontPath: Property<String>
 
+    /**
+     * Text size as a percentage of band height. Overrides the default 55% when set. Range 1–100.
+     * Sourced from [BannerSpec.textSizePct]; leave unset to use the default.
+     */
+    @get:Input
+    @get:Optional
+    abstract val bannerTextSizePct: Property<Int>
+
     companion object {
         // Candidates checked in order; first found wins. Fontconfig is often absent on macOS
         // ImageMagick builds, so we use explicit paths rather than font names. Linux paths cover
@@ -131,6 +145,19 @@ abstract class StampAndroidIconsTask : DefaultTask() {
             "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
             "/usr/share/fonts/truetype/ubuntu/Ubuntu-B.ttf",
         )
+
+        // Bold-specific candidates prepended before the regular list. Composed rather than copied
+        // so any new FONT_CANDIDATES entry automatically appears as a bold fallback. Internal for testability.
+        internal val BOLD_SPECIFIC_CANDIDATES = listOf(
+            // macOS — explicit bold files
+            "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+            "/Library/Fonts/Arial Bold.ttf",
+            // Linux — bold variants
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+            "/usr/share/fonts/truetype/ubuntu/Ubuntu-B.ttf",
+        )
+        internal val BOLD_FONT_CANDIDATES = BOLD_SPECIFIC_CANDIDATES + FONT_CANDIDATES
     }
 
     @TaskAction
@@ -169,9 +196,16 @@ abstract class StampAndroidIconsTask : DefaultTask() {
         // instantiated in tests, fontPath may be unset — null propagates to stampIcons() / overlay.
         val font: String? = fontPath.orNull
 
-        val legacyNames = setOf(base, "${base}_round")
+        val squareNames = setOf(base)
+        val roundNames = setOf("${base}_round")
         val adaptiveNames = setOf("${base}_foreground")
         val monochromeNames = setOf("${base}_monochrome")
+
+        // textSizePct from DSL (BannerSpec.textSizePct), or 55% default.
+        val effectiveTextPct = bannerTextSizePct.getOrElse(55)
+
+        val roundSafeWidthPct = roundSafeWidthPct(ROUND_HEIGHT_PCT, ROUND_BOTTOM_INSET_PCT)
+        val adaptiveSafeWidthPct = adaptiveSafeWidthPct(ADAPTIVE_HEIGHT_PCT, ADAPTIVE_BOTTOM_INSET_PCT)
 
         var totalStamped = 0
         var rasterForegroundFound = false
@@ -180,20 +214,45 @@ abstract class StampAndroidIconsTask : DefaultTask() {
             mipmapDirs.forEach { mipmapDir ->
                 val outMipmapDir = File(output, mipmapDir.name).apply { mkdirs() }
 
-                val legacyFiles = findIcons(mipmapDir, legacyNames)
-                if (legacyFiles.isNotEmpty()) {
+                // List the directory once and partition in memory — avoids 4 separate listFiles() calls.
+                val allFiles = mipmapDir.listFiles()
+                    ?.filter { it.extension in STAMPABLE_EXTENSIONS }
+                    ?: emptyList()
+                val squareFiles    = allFiles.filter { it.nameWithoutExtension in squareNames }
+                val roundFiles     = allFiles.filter { it.nameWithoutExtension in roundNames }
+                val adaptiveFiles  = allFiles.filter { it.nameWithoutExtension in adaptiveNames }
+                val monoFiles      = allFiles.filter { it.nameWithoutExtension in monochromeNames }
+
+                // Square legacy icon (ic_launcher): no circle-safe constraint needed.
+                if (squareFiles.isNotEmpty()) {
                     totalStamped += stampIcons(
                         cli = cli,
                         workDir = File(workRoot, "${mipmapDir.name}-legacy").also { it.mkdirs() },
-                        sources = legacyFiles,
+                        sources = squareFiles,
                         outputDir = outMipmapDir,
                         color = color, label = label,
-                        heightPct = 18, bottomInsetPct = 0, textPct = 55,
+                        heightPct = 18, bottomInsetPct = 0, textPct = effectiveTextPct,
+                        safeWidthPct = 100,
                         font = font,
                     )
                 }
 
-                val adaptiveFiles = findIcons(mipmapDir, adaptiveNames)
+                // Round legacy icon (ic_launcher_round): lifted inset + circle-safe text width
+                // so the label is never clipped by the circular launcher mask.
+                if (roundFiles.isNotEmpty()) {
+                    totalStamped += stampIcons(
+                        cli = cli,
+                        workDir = File(workRoot, "${mipmapDir.name}-round").also { it.mkdirs() },
+                        sources = roundFiles,
+                        outputDir = outMipmapDir,
+                        color = color, label = label,
+                        heightPct = ROUND_HEIGHT_PCT, bottomInsetPct = ROUND_BOTTOM_INSET_PCT,
+                        textPct = effectiveTextPct,
+                        safeWidthPct = roundSafeWidthPct,
+                        font = font,
+                    )
+                }
+
                 if (adaptiveFiles.isNotEmpty()) {
                     rasterForegroundFound = true
                     totalStamped += stampIcons(
@@ -204,14 +263,14 @@ abstract class StampAndroidIconsTask : DefaultTask() {
                         color = color, label = label,
                         heightPct = ADAPTIVE_HEIGHT_PCT,
                         bottomInsetPct = ADAPTIVE_BOTTOM_INSET_PCT,
-                        textPct = ADAPTIVE_TEXT_PCT,
+                        textPct = effectiveTextPct,
+                        safeWidthPct = adaptiveSafeWidthPct,
                         font = font,
                     )
                 }
 
                 // Copy monochrome without stamping.
-                findIcons(mipmapDir, monochromeNames)
-                    .forEach { it.copyTo(File(outMipmapDir, it.name), overwrite = true) }
+                monoFiles.forEach { it.copyTo(File(outMipmapDir, it.name), overwrite = true) }
             }
 
             // Raster foreground in drawable/ (density-independent WebP/PNG). Some projects store
@@ -232,7 +291,8 @@ abstract class StampAndroidIconsTask : DefaultTask() {
                         color = color, label = label,
                         heightPct = ADAPTIVE_HEIGHT_PCT,
                         bottomInsetPct = ADAPTIVE_BOTTOM_INSET_PCT,
-                        textPct = ADAPTIVE_TEXT_PCT,
+                        textPct = effectiveTextPct,
+                        safeWidthPct = adaptiveSafeWidthPct,
                         font = font,
                     )
                 }
@@ -251,6 +311,8 @@ abstract class StampAndroidIconsTask : DefaultTask() {
                         base = base, variant = variant,
                         mipmapDirs = mipmapDirs,
                         font = font,
+                        effectiveTextPct = effectiveTextPct,
+                        safeWidthPct = adaptiveSafeWidthPct,
                     )
                     totalStamped += mipmapDirs.size
                 }
@@ -281,6 +343,8 @@ abstract class StampAndroidIconsTask : DefaultTask() {
         base: String, variant: String,
         mipmapDirs: List<File>,
         font: String?,
+        effectiveTextPct: Int,
+        safeWidthPct: Int,
     ) {
         if (font == null) {
             logger.warn(
@@ -316,19 +380,32 @@ abstract class StampAndroidIconsTask : DefaultTask() {
 
             val bannerW = canvasPx
             val bannerH = (BANNER_HEIGHT_DP * densityFactor).toInt().coerceAtLeast(1)
-            val fontsize = (bannerH * ADAPTIVE_TEXT_PCT / 100).coerceAtLeast(6)
+
+            val safeW = (bannerW * safeWidthPct / 100.0).toInt().coerceAtLeast(1)
+
+            // Auto-shrink font (same 0.6×/char heuristic as the CLI) until text fits safeW.
+            var fontsize = (bannerH * effectiveTextPct / 100).coerceAtLeast(6)
+            val labelLen = label.length
+            while (fontsize > 6) {
+                val estW = labelLen * fontsize * 6 / 10
+                if (estW <= safeW) break
+                fontsize--
+            }
 
             val outMipmapDir = File(output, mipmapDir.name).apply { mkdirs() }
             val bannerPng = File(outMipmapDir, "$bannerResourceName.png")
 
+            // Two-layer composite: full-width colored band with a safeW-wide text layer centered.
             val process = ProcessBuilder(
                 im,
                 "-size", "${bannerW}x${bannerH}", "xc:$color",
-                "-font", font,
-                "-fill", "white",
-                "-gravity", "center",
-                "-pointsize", fontsize.toString(),
-                "-annotate", "0", label,
+                "(", "-size", "${safeW}x${bannerH}", "xc:none",
+                    "-font", font,
+                    "-fill", "white",
+                    "-gravity", "center",
+                    "-pointsize", fontsize.toString(),
+                    "-annotate", "0", label,
+                ")", "-gravity", "center", "-composite",
                 "-colorspace", "sRGB",
                 "-type", "TrueColor",
                 "-strip",
@@ -398,6 +475,7 @@ abstract class StampAndroidIconsTask : DefaultTask() {
         cli: File, workDir: File, sources: List<File>, outputDir: File,
         color: String, label: String,
         heightPct: Int, bottomInsetPct: Int, textPct: Int,
+        safeWidthPct: Int = 100,
         font: String?,
     ): Int {
         val resolvedFont = font ?: error(
@@ -418,6 +496,7 @@ abstract class StampAndroidIconsTask : DefaultTask() {
             "--bottom-inset-pct", bottomInsetPct.toString(),
             "--text-pct", textPct.toString(),
             "--font", resolvedFont,
+            "--safe-width-pct", safeWidthPct.toString(),
         ).redirectErrorStream(true).start()
 
         val cliOutput = process.inputStream.bufferedReader().readText()
@@ -429,6 +508,14 @@ abstract class StampAndroidIconsTask : DefaultTask() {
         }
         return sources.size
     }
+
+    // Geometry helpers are file-level internal functions so they can be unit-tested
+    // without requiring a full Gradle task instance.
+    private fun roundSafeWidthPct(heightPct: Int, bottomInsetPct: Int) =
+        roundSafeWidthPctInternal(heightPct, bottomInsetPct)
+
+    private fun adaptiveSafeWidthPct(heightPct: Int, bottomInsetPct: Int) =
+        adaptiveSafeWidthPctInternal(heightPct, bottomInsetPct)
 
     /**
      * Returns the XML foreground file if the adaptive icon XML references one, or null if the
@@ -472,3 +559,41 @@ abstract class StampAndroidIconsTask : DefaultTask() {
         return cli
     }
 }
+
+/**
+ * Safe text-width for round (circle-masked) legacy icons as a percentage of icon width.
+ *
+ * A round icon with a circular mask of radius R = icon_height/2 exposes a chord width at the
+ * band's vertical center equal to `2R × sqrt(1 − (1 − 2·ycFrac)²)`, where `ycFrac` is the
+ * fraction of icon height from the bottom to the band center.
+ *
+ * Note: measures the chord at the band CENTER, not the text bottom — the tightest constraint
+ * is slightly lower (band center − half font height). The 0.6 × fontsize/char shrink heuristic
+ * errs conservatively and compensates in practice.
+ *
+ * Internal for testability.
+ */
+internal fun roundSafeWidthPctInternal(heightPct: Int, bottomInsetPct: Int): Int {
+    val ycFrac = (bottomInsetPct + heightPct / 2.0) / 100.0
+    val oneMinusTwiceYc = 1.0 - 2.0 * ycFrac
+    return Math.sqrt(Math.max(0.0, 1.0 - oneMinusTwiceYc * oneMinusTwiceYc)).asSafeWidthPct()
+}
+
+/**
+ * Safe text-width for adaptive icon foreground as a percentage of the 108dp canvas width.
+ *
+ * Uses the tightest Android-compliant mask shape: a circle of radius 33dp centered at 54dp
+ * on the 108dp adaptive canvas. Measures chord width at band center; same approximation caveat
+ * as [roundSafeWidthPctInternal] applies.
+ *
+ * Internal for testability.
+ */
+internal fun adaptiveSafeWidthPctInternal(heightPct: Int, bottomInsetPct: Int): Int {
+    val bandCenterFromBottom = (bottomInsetPct + heightPct / 2.0) / 100.0
+    val distFromCanvasCenterFrac = Math.abs(0.5 - bandCenterFromBottom)
+    val distDp = distFromCanvasCenterFrac * 108.0
+    val safeHalfDp = Math.sqrt(Math.max(0.0, 33.0 * 33.0 - distDp * distDp))
+    return (safeHalfDp * 2.0 / 108.0).asSafeWidthPct()
+}
+
+internal fun Double.asSafeWidthPct() = (this * 100.0).toInt().coerceAtMost(100)

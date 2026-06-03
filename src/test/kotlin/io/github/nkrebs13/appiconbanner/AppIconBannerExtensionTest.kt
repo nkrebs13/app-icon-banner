@@ -194,6 +194,68 @@ class AppIconBannerExtensionTest {
     }
 
     @Test
+    fun `textSizePct is passed through to BannerConfig`() {
+        val ext = extension { buildType("internal") { color = "#FF6F00"; label = "INTERNAL"; textSizePct = 40 } }
+        val config = ext.resolveAndroid("internal", emptyList(), "internal")
+        assertEquals(40, config?.textSizePct)
+    }
+
+    @Test
+    fun `textSizePct null by default`() {
+        val ext = extension { buildType("debug") {} }
+        val config = ext.resolveAndroid("debug", emptyList(), "debug")
+        assertNull(config?.textSizePct)
+    }
+
+    @Test
+    fun `textSizePct out of range throws — lower bound`() {
+        val ext = extension { buildType("debug") { textSizePct = 0 } }
+        val ex = assertThrows<IllegalArgumentException> {
+            ext.resolveAndroid("debug", emptyList(), "debug")
+        }
+        assertTrue(ex.message!!.contains("textSizePct"),
+            "expected 'textSizePct' in: ${ex.message}")
+    }
+
+    @Test
+    fun `textSizePct out of range throws — upper bound`() {
+        val ext = extension { buildType("debug") { textSizePct = 101 } }
+        val ex = assertThrows<IllegalArgumentException> {
+            ext.resolveAndroid("debug", emptyList(), "debug")
+        }
+        assertTrue(ex.message!!.contains("textSizePct"),
+            "expected 'textSizePct' in: ${ex.message}")
+    }
+
+    @Test
+    fun `textSizePct minimum value 1 is accepted`() {
+        val ext = extension { buildType("debug") { textSizePct = 1 } }
+        val config = ext.resolveAndroid("debug", emptyList(), "debug")
+        assertEquals(1, config?.textSizePct)
+    }
+
+    @Test
+    fun `textSizePct maximum value 100 is accepted`() {
+        val ext = extension { buildType("debug") { textSizePct = 100 } }
+        val config = ext.resolveAndroid("debug", emptyList(), "debug")
+        assertEquals(100, config?.textSizePct)
+    }
+
+    @Test
+    fun `bold flag is passed through to BannerConfig`() {
+        val ext = extension { buildType("internal") { color = "#FF6F00"; label = "INTERNAL"; bold = true } }
+        val config = ext.resolveAndroid("internal", emptyList(), "internal")
+        assertEquals(true, config?.bold)
+    }
+
+    @Test
+    fun `bold defaults to false`() {
+        val ext = extension { buildType("debug") {} }
+        val config = ext.resolveAndroid("debug", emptyList(), "debug")
+        assertEquals(false, config?.bold)
+    }
+
+    @Test
     fun `validateAndroidResDir rejects absolute path`() {
         val ex = assertThrows<IllegalArgumentException> { validateAndroidResDir("/etc/passwd") }
         assertTrue(ex.message!!.contains("relative") && ex.message!!.contains("appIconBanner"),

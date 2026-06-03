@@ -37,24 +37,33 @@ public final class io/github/nkrebs13/appiconbanner/AppIconBannerPlugin$inlined$
 }
 
 public final class io/github/nkrebs13/appiconbanner/BannerConfig {
-	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Z)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Ljava/lang/String;
 	public final fun component2 ()Ljava/lang/String;
-	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Lio/github/nkrebs13/appiconbanner/BannerConfig;
-	public static synthetic fun copy$default (Lio/github/nkrebs13/appiconbanner/BannerConfig;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lio/github/nkrebs13/appiconbanner/BannerConfig;
+	public final fun component3 ()Ljava/lang/Integer;
+	public final fun component4 ()Z
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;Z)Lio/github/nkrebs13/appiconbanner/BannerConfig;
+	public static synthetic fun copy$default (Lio/github/nkrebs13/appiconbanner/BannerConfig;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Integer;ZILjava/lang/Object;)Lio/github/nkrebs13/appiconbanner/BannerConfig;
 	public fun equals (Ljava/lang/Object;)Z
+	public final fun getBold ()Z
 	public final fun getColor ()Ljava/lang/String;
 	public final fun getLabel ()Ljava/lang/String;
+	public final fun getTextSizePct ()Ljava/lang/Integer;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
 }
 
 public final class io/github/nkrebs13/appiconbanner/BannerSpec {
 	public fun <init> ()V
+	public final fun getBold ()Z
 	public final fun getColor ()Ljava/lang/String;
 	public final fun getLabel ()Ljava/lang/String;
+	public final fun getTextSizePct ()Ljava/lang/Integer;
+	public final fun setBold (Z)V
 	public final fun setColor (Ljava/lang/String;)V
 	public final fun setLabel (Ljava/lang/String;)V
+	public final fun setTextSizePct (Ljava/lang/Integer;)V
 }
 
 public abstract class io/github/nkrebs13/appiconbanner/android/StampAndroidIconsTask : org/gradle/api/DefaultTask {
@@ -62,6 +71,7 @@ public abstract class io/github/nkrebs13/appiconbanner/android/StampAndroidIcons
 	public fun <init> ()V
 	public abstract fun getBannerColor ()Lorg/gradle/api/provider/Property;
 	public abstract fun getBannerLabel ()Lorg/gradle/api/provider/Property;
+	public abstract fun getBannerTextSizePct ()Lorg/gradle/api/provider/Property;
 	public abstract fun getFontPath ()Lorg/gradle/api/provider/Property;
 	public abstract fun getIconName ()Lorg/gradle/api/provider/Property;
 	public abstract fun getOutputDir ()Lorg/gradle/api/file/DirectoryProperty;

@@ -33,10 +33,15 @@ internal fun validateAndroidResDir(dir: String) {
  * [AppIconBannerExtension.DEFAULT_COLOR] when omitted.
  * [label] must not contain `|` (config-file field separator) or `%` (ImageMagick format specifier);
  * defaults to the slot name when omitted.
+ * [textSizePct] overrides the default 55% text-size-to-band-height ratio (Android only). Must be
+ * in 1–100 if set.
+ * [bold] prefers bold system font variants for Android icon stamping.
  */
 class BannerSpec {
     var color: String? = null
     var label: String? = null
+    var textSizePct: Int? = null
+    var bold: Boolean = false
 
     internal fun toConfig(fallbackLabel: String): BannerConfig {
         val resolvedColor = color ?: AppIconBannerExtension.DEFAULT_COLOR
@@ -59,7 +64,12 @@ class BannerSpec {
         require(resolvedLabel.length <= MAX_LABEL_LENGTH) {
             "appIconBanner: label is too long (${resolvedLabel.length} chars); max is $MAX_LABEL_LENGTH"
         }
-        return BannerConfig(color = resolvedColor, label = resolvedLabel)
+        textSizePct?.let {
+            require(it in 1..100) {
+                "appIconBanner: textSizePct must be in 1–100 (got $it)"
+            }
+        }
+        return BannerConfig(color = resolvedColor, label = resolvedLabel, textSizePct = textSizePct, bold = bold)
     }
 }
 
