@@ -174,15 +174,6 @@ abstract class StampAndroidIconsTask : DefaultTask() {
         }
         val anydpiDirs = allSourceDirs.filter { it.name.startsWith("mipmap-anydpi") }
 
-        if (mipmapDirs.isEmpty()) {
-            logger.warn(
-                "app-icon-banner: no mipmap-* directories found in ${source.path}. " +
-                    "Check that androidResDir points to your Android res/ directory. " +
-                    "Default: src/androidMain/res (Compose Multiplatform) or src/main/res.",
-            )
-            return
-        }
-
         // Use Gradle's managed temporaryDir for scratch space — it is excluded from output
         // snapshotting, not a sibling of the @OutputDirectory, and cleaned by ./gradlew clean.
         val workRoot = File(temporaryDir, "stamp-work").apply { mkdirs() }
@@ -301,7 +292,7 @@ abstract class StampAndroidIconsTask : DefaultTask() {
             // If there are no raster foreground images across any density bucket, check whether
             // the adaptive icon XML references an XML vector foreground. Reading from the adaptive
             // icon XML directly is authoritative — avoids guessing the drawable name/location.
-            if (!rasterForegroundFound) {
+            if (!rasterForegroundFound && mipmapDirs.isNotEmpty()) {
                 val xmlForeground = detectXmlVectorForeground(source, anydpiDirs)
                 if (xmlForeground != null) {
                     generateXmlForegroundOverlay(
@@ -321,6 +312,18 @@ abstract class StampAndroidIconsTask : DefaultTask() {
             workRoot.deleteRecursively()
         }
 
+        if (totalStamped == 0) {
+            logger.warn(
+                "app-icon-banner: nothing stamped in ${source.path}. Supported layouts: " +
+                    "raster icons in mipmap-{density}/, a raster adaptive foreground in " +
+                    "drawable/ (minSdk >= 26 apps often have ONLY this), or an XML vector " +
+                    "foreground referenced from mipmap-anydpi*/ (requires density mipmap dirs " +
+                    "for the banner overlay PNGs). Check that androidResDir points to your " +
+                    "Android res/ directory — default: src/androidMain/res (Compose " +
+                    "Multiplatform) or src/main/res.",
+            )
+            return
+        }
         logger.lifecycle(
             "app-icon-banner: stamped ${totalStamped} Android icon(s) for '${label}' (${color})",
         )
