@@ -282,4 +282,59 @@ class CliSmokeTest {
 
     private fun sha256(file: File): String =
         MessageDigest.getInstance("SHA-256").digest(file.readBytes()).joinToString("") { "%02x".format(it) }
+
+    @Test
+    fun `StampAndroidIconsTask stamps a drawable-only adaptive foreground when no density mipmaps exist`(
+        @TempDir dir: File,
+    ) {
+        val magick = imageMagickWithFreetype()
+        assumeTrue(magick != null, "Freetype-enabled ImageMagick not available")
+
+        // minSdk >= 26 layout: NO mipmap-{density} dirs at all — only the adaptive XMLs in
+        // mipmap-anydpi and a raster foreground in drawable/. Regression: the task used to
+        // early-return on "no mipmap-* directories" before reaching the drawable fallback,
+        // silently shipping unbanned debug/internal builds.
+        val resDir = File(dir, "res").apply { mkdirs() }
+        val drawableDir = File(resDir, "drawable").apply { mkdirs() }
+        val anydpiDir = File(resDir, "mipmap-anydpi").apply { mkdirs() }
+        val foregroundIcon = File(drawableDir, "ic_launcher_foreground.png")
+        run(dir, listOf(magick!!, "-size", "432x432", "gradient:#1a73e8-#34a853", foregroundIcon.path))
+        File(anydpiDir, "ic_launcher.xml").writeText(
+            """<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@drawable/ic_launcher_background"/>
+    <foreground android:drawable="@drawable/ic_launcher_foreground"/>
+</adaptive-icon>
+""",
+        )
+        val originalForegroundSha = sha256(foregroundIcon)
+
+        val project = ProjectBuilder.builder().withProjectDir(dir).build()
+        val task = project.tasks.register(
+            "stampInternalAndroidIcons",
+            StampAndroidIconsTask::class.java,
+        ).get()
+
+        val font = StampAndroidIconsTask.FONT_CANDIDATES.firstOrNull { File(it).exists() }
+        assumeTrue(font != null, "No system font found")
+
+        val outputDir = File(dir, "build/generated/app-icon-banner/internal/res")
+        task.sourceResDir.set(resDir)
+        task.bannerColor.set("#FF6F00")
+        task.bannerLabel.set("INTERNAL")
+        task.iconName.set("ic_launcher")
+        task.variantName.set("internal")
+        task.outputDir.set(outputDir)
+        task.fontPath.set(font)
+
+        task.stamp()
+
+        val outForeground = File(outputDir, "drawable/ic_launcher_foreground.png")
+        assertTrue(outForeground.exists(), "drawable foreground should be stamped into generated res")
+        assertNotEquals(
+            originalForegroundSha,
+            sha256(outForeground),
+            "foreground must be stamped even with zero density mipmap dirs",
+        )
+    }
 }
