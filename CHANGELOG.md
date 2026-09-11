@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Fixed
+- Android XML foreground overlays now use a transparent full adaptive-icon canvas with a
+  proportionally positioned banner. This keeps debug/internal banners visible when a launcher
+  normalizes the adaptive foreground below its 108dp source bounds, without obscuring the base
+  icon outside the banner band.
+
 ## [0.1.3] — 2026-06-03
 
 ### Added
