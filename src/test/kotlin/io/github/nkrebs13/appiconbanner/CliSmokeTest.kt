@@ -242,9 +242,10 @@ class CliSmokeTest {
             identify(dir, magick, outBannerPng, "%[pixel:p{0,0}]"),
             "transparent canvas must not hide the original adaptive foreground",
         )
-        assertTrue(
-            identify(dir, magick, outBannerPng, "%[pixel:p{0,200}]").contains("2,136,209"),
-            "banner band must remain opaque at its proportional canvas position",
+        assertEquals(
+            "srgba(2,136,209,1)",
+            identify(dir, magick, outBannerPng, "%[pixel:p{0,200}]"),
+            "banner band must retain its exact opaque RGBA color at its proportional canvas position",
         )
 
         // Layer-list XML should be written with the correct references.
