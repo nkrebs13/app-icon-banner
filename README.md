@@ -30,7 +30,7 @@ Apply the plugin in your Android application module **after** the Android plugin
 // app/build.gradle.kts  (or composeApp/build.gradle.kts in a KMP project)
 plugins {
     id("com.android.application")
-    id("io.github.nkrebs13.app-icon-banner") version "0.1.2"
+    id("io.github.nkrebs13.app-icon-banner") version "0.1.6"
 }
 ```
 

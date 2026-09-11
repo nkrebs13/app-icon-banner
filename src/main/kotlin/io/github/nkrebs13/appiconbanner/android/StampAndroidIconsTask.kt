@@ -39,7 +39,11 @@ private const val ADAPTIVE_BOTTOM_INSET_PCT = 20
 private const val ROUND_HEIGHT_PCT = 18
 private const val ROUND_BOTTOM_INSET_PCT = 10
 
-// dp values used in the layer-list XML (density-independent; same XML works at all densities).
+// Adaptive-canvas geometry. The XML-overlay banner is a transparent 108dp canvas, rather than
+// a 24dp strip inset with absolute layer-list dimensions. AdaptiveIconDrawable is permitted to
+// give its foreground fewer than 108dp of bounds; absolute 62dp + 22dp insets can then consume
+// the entire child and make the strip disappear. A full-canvas overlay scales with foreground
+// bounds exactly like the raster-foreground stamping path.
 //   banner height dp  = round(108 × 22/100) = 24dp
 //   banner inset dp   = round(108 × 20/100) = 22dp
 //   banner top dp     = 108 − 24 − 22 = 62dp
@@ -63,9 +67,10 @@ private const val BANNER_TOP_DP = 108 - BANNER_HEIGHT_DP - BANNER_BOTTOM_DP  // 
  *   wallpaper-derived tint, making a banner invisible.
  *
  * **XML vector foreground** (`drawable/ic_launcher_foreground.xml`): when no raster foreground
- * exists, the plugin generates a banner layer-list overlay:
+ * exists, the plugin generates a full-canvas banner layer-list overlay:
  *
- * 1. A banner-only PNG per density (`mipmap-{density}/app_icon_banner_{variant}.png`).
+ * 1. A transparent 108dp canvas PNG per density, with its banner positioned proportionally
+ *    (`mipmap-{density}/app_icon_banner_{variant}.png`).
  * 2. A layer-list XML (`drawable/ic_launcher_foreground_{variant}.xml`) that stacks the
  *    original foreground vector + the banner PNG at the correct safe-zone position.
  * 3. Updated adaptive-icon XML files in `mipmap-anydpi` directories that reference the new
@@ -374,20 +379,22 @@ abstract class StampAndroidIconsTask : DefaultTask() {
             return
         }
 
-        // 1. Generate a banner-only PNG per density.
-        //    Width = full adaptive canvas; height = 24dp × density_factor (matches layer-list).
+        // 1. Generate a full adaptive-canvas PNG per density, transparent apart from the banner.
+        //    It must fill the layer-list item: foreground bounds can be smaller than 108dp on
+        //    launchers that normalize/mask adaptive icons, so fixed dp insets can collapse a
+        //    strip-only child to zero height.
         mipmapDirs.forEach { mipmapDir ->
             val density = mipmapDir.name.removePrefix("mipmap-")
             val canvasPx = ADAPTIVE_CANVAS_PX[density] ?: return@forEach
             val densityFactor = canvasPx / 108.0
 
-            val bannerW = canvasPx
-            val bannerH = (BANNER_HEIGHT_DP * densityFactor).toInt().coerceAtLeast(1)
+            val bannerBandH = (BANNER_HEIGHT_DP * densityFactor).toInt().coerceAtLeast(1)
+            val bannerTop = (BANNER_TOP_DP * densityFactor).toInt()
 
-            val safeW = (bannerW * safeWidthPct / 100.0).toInt().coerceAtLeast(1)
+            val safeW = (canvasPx * safeWidthPct / 100.0).toInt().coerceAtLeast(1)
 
             // Auto-shrink font (same 0.6×/char heuristic as the CLI) until text fits safeW.
-            var fontsize = (bannerH * effectiveTextPct / 100).coerceAtLeast(6)
+            var fontsize = (bannerBandH * effectiveTextPct / 100).coerceAtLeast(6)
             val labelLen = label.length
             while (fontsize > 6) {
                 val estW = labelLen * fontsize * 6 / 10
@@ -398,19 +405,25 @@ abstract class StampAndroidIconsTask : DefaultTask() {
             val outMipmapDir = File(output, mipmapDir.name).apply { mkdirs() }
             val bannerPng = File(outMipmapDir, "$bannerResourceName.png")
 
-            // Two-layer composite: full-width colored band with a safeW-wide text layer centered.
+            // Three-layer composite: transparent adaptive canvas, full-width colored band, and
+            // a safeW-wide text layer. The final NorthWest geometry puts the band at its
+            // proportional canvas position before Android applies launcher-specific bounds.
             val process = ProcessBuilder(
                 im,
-                "-size", "${bannerW}x${bannerH}", "xc:$color",
-                "(", "-size", "${safeW}x${bannerH}", "xc:none",
-                    "-font", font,
-                    "-fill", "white",
-                    "-gravity", "center",
-                    "-pointsize", fontsize.toString(),
-                    "-annotate", "0", label,
-                ")", "-gravity", "center", "-composite",
+                "-size", "${canvasPx}x${canvasPx}", "xc:none",
+                "(", "-size", "${canvasPx}x${bannerBandH}", "xc:$color",
+                    "(", "-size", "${safeW}x${bannerBandH}", "xc:none",
+                        "-font", font,
+                        "-fill", "white",
+                        "-gravity", "center",
+                        "-pointsize", fontsize.toString(),
+                        "-annotate", "0", label,
+                    ")", "-gravity", "center", "-composite",
+                ")", "-gravity", "northwest", "-geometry", "+0+$bannerTop", "-composite",
                 "-colorspace", "sRGB",
-                "-type", "TrueColor",
+                // Preserve the transparent canvas. TrueColor would make the non-banner area
+                // opaque black and hide the original adaptive foreground beneath this overlay.
+                "-type", "TrueColorAlpha",
                 "-strip",
                 bannerPng.absolutePath,
             ).redirectErrorStream(true).start()
@@ -419,17 +432,15 @@ abstract class StampAndroidIconsTask : DefaultTask() {
             if (process.waitFor() != 0) error("app-icon-banner: banner PNG generation failed:\n$out")
         }
 
-        // 2. Write the layer-list XML that stacks original foreground + banner.
-        //    Uses dp units so the same XML works at all densities.
+        // 2. Write the layer-list XML that stacks original foreground + full-canvas banner.
+        //    Do not put fixed dp insets on the banner item: the canvas handles positioning
+        //    proportionally when AdaptiveIconDrawable narrows the foreground bounds.
         val drawableOut = File(output, "drawable").apply { mkdirs() }
         File(drawableOut, "$foregroundLayerName.xml").writeText(
             """<?xml version="1.0" encoding="utf-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:drawable="@drawable/${base}_foreground"/>
-    <item
-        android:top="${BANNER_TOP_DP}dp"
-        android:bottom="${BANNER_BOTTOM_DP}dp"
-        android:drawable="@mipmap/$bannerResourceName"/>
+    <item android:drawable="@mipmap/$bannerResourceName"/>
 </layer-list>
 """,
         )

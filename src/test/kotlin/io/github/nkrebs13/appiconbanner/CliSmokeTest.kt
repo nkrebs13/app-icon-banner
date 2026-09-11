@@ -230,10 +230,23 @@ class CliSmokeTest {
         val outLegacy = File(outputDir, "mipmap-xxhdpi/ic_launcher.png")
         assertTrue(outLegacy.exists(), "legacy icon should be in output")
 
-        // Banner-only PNG should be generated for the adaptive overlay.
+        // The adaptive overlay must be a full transparent canvas: AdaptiveIconDrawable may
+        // normalize its foreground bounds below 108dp, so a strip-only drawable with absolute
+        // layer-list insets can collapse and disappear.
         val outBannerPng = File(outputDir, "mipmap-xxhdpi/app_icon_banner_debug.png")
         assertTrue(outBannerPng.exists(), "banner PNG for adaptive overlay should be generated")
         assertTrue(outBannerPng.length() > 0, "banner PNG should be non-empty")
+        assertEquals("324x324", identify(dir, magick, outBannerPng, "%wx%h"))
+        assertEquals(
+            "srgba(0,0,0,0)",
+            identify(dir, magick, outBannerPng, "%[pixel:p{0,0}]"),
+            "transparent canvas must not hide the original adaptive foreground",
+        )
+        assertEquals(
+            "srgba(2,136,209,1)",
+            identify(dir, magick, outBannerPng, "%[pixel:p{0,200}]"),
+            "banner band must retain its exact opaque RGBA color at its proportional canvas position",
+        )
 
         // Layer-list XML should be written with the correct references.
         val layerList = File(outputDir, "drawable/ic_launcher_foreground_debug.xml")
@@ -241,6 +254,7 @@ class CliSmokeTest {
         val layerListContent = layerList.readText()
         assertTrue("@drawable/ic_launcher_foreground" in layerListContent, "layer-list must reference original foreground")
         assertTrue("@mipmap/app_icon_banner_debug" in layerListContent, "layer-list must reference banner PNG")
+        assertTrue("android:top" !in layerListContent, "overlay position belongs in the proportional canvas")
 
         // Updated adaptive-icon XML should reference the new layer-list foreground.
         val updatedAdaptive = File(outputDir, "mipmap-anydpi-v26/ic_launcher.xml")
@@ -278,6 +292,16 @@ class CliSmokeTest {
         val process = pb.start()
         process.inputStream.bufferedReader().readText()
         return process.waitFor()
+    }
+
+    private fun identify(dir: File, magick: String, file: File, format: String): String {
+        val process = ProcessBuilder(magick, file.path, "-format", format, "info:")
+            .directory(dir)
+            .redirectErrorStream(true)
+            .start()
+        val output = process.inputStream.bufferedReader().readText()
+        assertEquals(0, process.waitFor(), "ImageMagick identify should succeed: $output")
+        return output.trim()
     }
 
     private fun sha256(file: File): String =

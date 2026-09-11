@@ -1,6 +1,12 @@
 # Changelog
 
-## [Unreleased]
+## [0.1.6] — 2026-09-10
+
+### Fixed
+- Android XML foreground overlays now use a transparent full adaptive-icon canvas with a
+  proportionally positioned banner. This keeps debug/internal banners visible when a launcher
+  normalizes the adaptive foreground below its 108dp source bounds, without obscuring the base
+  icon outside the banner band.
 
 ## [0.1.3] — 2026-06-03
 
@@ -58,6 +64,7 @@
 - Binary Compatibility Validator baseline for API surface enforcement.
 - GitHub Actions: build + test on Ubuntu + macOS; publish to Gradle Plugin Portal on `v*.*.*` tags.
 
+[0.1.6]: https://github.com/nkrebs13/app-icon-banner/releases/tag/v0.1.6
 [0.1.2]: https://github.com/nkrebs13/app-icon-banner/releases/tag/v0.1.2
 [0.1.1]: https://github.com/nkrebs13/app-icon-banner/releases/tag/v0.1.1
 [0.1.0]: https://github.com/nkrebs13/app-icon-banner/releases/tag/v0.1.0
