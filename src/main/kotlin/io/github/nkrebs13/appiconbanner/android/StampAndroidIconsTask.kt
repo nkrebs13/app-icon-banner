@@ -67,9 +67,10 @@ private const val BANNER_TOP_DP = 108 - BANNER_HEIGHT_DP - BANNER_BOTTOM_DP  // 
  *   wallpaper-derived tint, making a banner invisible.
  *
  * **XML vector foreground** (`drawable/ic_launcher_foreground.xml`): when no raster foreground
- * exists, the plugin generates a banner layer-list overlay:
+ * exists, the plugin generates a full-canvas banner layer-list overlay:
  *
- * 1. A banner-only PNG per density (`mipmap-{density}/app_icon_banner_{variant}.png`).
+ * 1. A transparent 108dp canvas PNG per density, with its banner positioned proportionally
+ *    (`mipmap-{density}/app_icon_banner_{variant}.png`).
  * 2. A layer-list XML (`drawable/ic_launcher_foreground_{variant}.xml`) that stacks the
  *    original foreground vector + the banner PNG at the correct safe-zone position.
  * 3. Updated adaptive-icon XML files in `mipmap-anydpi` directories that reference the new
@@ -387,12 +388,10 @@ abstract class StampAndroidIconsTask : DefaultTask() {
             val canvasPx = ADAPTIVE_CANVAS_PX[density] ?: return@forEach
             val densityFactor = canvasPx / 108.0
 
-            val bannerW = canvasPx
-            val bannerH = canvasPx
             val bannerBandH = (BANNER_HEIGHT_DP * densityFactor).toInt().coerceAtLeast(1)
             val bannerTop = (BANNER_TOP_DP * densityFactor).toInt()
 
-            val safeW = (bannerW * safeWidthPct / 100.0).toInt().coerceAtLeast(1)
+            val safeW = (canvasPx * safeWidthPct / 100.0).toInt().coerceAtLeast(1)
 
             // Auto-shrink font (same 0.6×/char heuristic as the CLI) until text fits safeW.
             var fontsize = (bannerBandH * effectiveTextPct / 100).coerceAtLeast(6)
@@ -411,8 +410,8 @@ abstract class StampAndroidIconsTask : DefaultTask() {
             // proportional canvas position before Android applies launcher-specific bounds.
             val process = ProcessBuilder(
                 im,
-                "-size", "${bannerW}x${bannerH}", "xc:none",
-                "(", "-size", "${bannerW}x${bannerBandH}", "xc:$color",
+                "-size", "${canvasPx}x${canvasPx}", "xc:none",
+                "(", "-size", "${canvasPx}x${bannerBandH}", "xc:$color",
                     "(", "-size", "${safeW}x${bannerBandH}", "xc:none",
                         "-font", font,
                         "-fill", "white",
